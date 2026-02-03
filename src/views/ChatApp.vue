@@ -179,35 +179,41 @@ const sendBrowserNotification = (p) => {
   }
 }
 
-const deleteMessage = async (msg) => { // id ではなく msg に変更
-  if (!msg || !msg.id) {
-    console.error("削除対象に誤りがあります。：", msg);
-    return;
-  }
+const deleteMessage = async (msg) => {
+  if (!msg || !msg.id) return
+  if (!confirm('このメッセージを削除しますか？')) return
 
-  if (!confirm('このメッセージを削除しますか？')) return;
+  // 1. メッセージ内から画像URLをすべて抽出
+  const urlRegex = /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+  const foundUrls = msg.content.match(urlRegex) || []
 
-  // 1. 画像ならストレージからも消す
-  if (isImage(msg.content)) {
-    const filePath = msg.content.split('/chat-attachments/')[1];
-    if (filePath) {
-      await supabase.storage.from('chat-attachments').remove([filePath]);
+  // 2. 抽出したURLがあればストレージから削除
+  if (foundUrls.length > 0) {
+    for (const url of foundUrls) {
+      // URLからファイルパスを抜き出す
+      const filePath = url.split('/chat-attachments/')[1]
+      if (filePath) {
+        const { error: storageError } = await supabase.storage
+          .from('chat-attachments')
+          .remove([filePath])
+        
+        if (storageError) console.error('ストレージ削除失敗:', storageError)
+      }
     }
   }
 
-  // 2. DBから消す
+  // 3. DBからメッセージを消す（いつもの）
   const { error } = await supabase
     .from('messages')
     .delete()
-    .eq('id', msg.id); // ここで msg.id を使う
+    .eq('id', msg.id)
 
   if (error) {
-    alert('削除失敗：' + error.message);
+    alert('削除失敗：' + error.message)
   } else {
-    // 画面上のリストからも消す
-    messages.value = messages.value.filter((m) => m.id !== msg.id);
+    messages.value = messages.value.filter((m) => m.id !== msg.id)
   }
-};
+}
 
 const updateMessage = async (id, newContent) => {
   const { error } = await supabase

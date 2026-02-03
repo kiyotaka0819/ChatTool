@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 
 const emit = defineEmits(['send', 'typing'])
 const newMessage = ref('')
+const pendingImage = ref(null)
 
 // --- 「入力中...」のロジック ---
 let typingTimeout = null
@@ -24,64 +25,99 @@ watch(newMessage, (val) => {
 })
 
 const handleSend = () => {
-  if (!newMessage.value.trim()) return
-  emit('send', newMessage.value)
+  // 画像もテキストも空なら何もしない
+  if (!newMessage.value.trim() && !pendingImage.value) return
+  // メッセージを組み立てる
+  const content = pendingImage.value || newMessage.value
+  // もしテキストも画像も両方あるなら、合体させて送る
+  const finalContent = pendingImage.value && newMessage.value.trim() 
+    ? `${newMessage.value}\n${pendingImage.value}` 
+    : content
+  emit('send', finalContent)
+  // 送信後は全部空にする
   newMessage.value = ''
-  emit('typing', false) // 送信したら入力中を解除
+  pendingImage.value = null
+  emit('typing', false)
 }
 
+// ペースト時は「保存」だけする
 const handlePaste = async (event) => {
   const item = event.clipboardData.items[0]
   if (item?.type.indexOf('image') !== -1) {
     const file = item.getAsFile()
-    if (!file) return
+    if (!file || file.size > 2 * 1024 * 1024) return alert('3MB以下にしてください')
 
-    // 前に話したサイズリミット（2MB）
-    if (file.size > 2 * 1024 * 1024) {
-      alert('3MB以下の画像にしてください')
-      return
-    }
-
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Math.random()}.${fileExt}`
-    const filePath = `chat-images/${fileName}`
-
+    const fileName = `${Math.random()}.${file.name.split('.').pop()}`
     const { data, error } = await supabase.storage
       .from('chat-attachments')
-      .upload(filePath, file)
+      .upload(`chat-images/${fileName}`, file)
 
-    if (error) {
-      alert('画像アップ失敗：' + error.message)
-      return
-    }
+    if (error) return alert('アップ失敗：' + error.message)
 
     const { data: { publicUrl } } = supabase.storage
       .from('chat-attachments')
-      .getPublicUrl(filePath)
+      .getPublicUrl(`chat-images/${fileName}`)
 
-    emit('send', publicUrl)
+    // 即送信せず、プレビューに入れる
+    pendingImage.value = publicUrl
   }
+}
+
+const clearImage = () => {
+  pendingImage.value = null
 }
 </script>
 
 <template>
-  <div class="input-area">
-    <textarea
-      v-model="newMessage"
-      @keydown.enter.exact.prevent="handleSend"
-      placeholder="メッセージを入力... (Shift+Enterで改行)"
-      @paste="handlePaste"
-    ></textarea>
-    <button
-      @click="handleSend"
-      :disabled="!newMessage.trim()"
-    >
-      送信
-    </button>
+  <div class="input-container">
+    <div v-if="pendingImage" class="image-preview">
+      <img :src="pendingImage" />
+      <button @click="clearImage" class="clear-btn">×</button>
+    </div>
+
+    <div class="input-area">
+      <textarea
+        v-model="newMessage"
+        @keydown.enter.exact.prevent="handleSend"
+        placeholder="メッセージを入力..."
+        @paste="handlePaste"
+      ></textarea>
+      <button @click="handleSend" :disabled="!newMessage.trim() && !pendingImage">
+        送信
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.input-container {
+  display: flex;
+  flex-direction: column;
+  background: #252525;
+  border-top: 1px solid #333;
+}
+.image-preview {
+  padding: 10px 20px;
+  position: relative;
+  display: inline-block;
+}
+.image-preview img {
+  max-height: 100px;
+  border-radius: 8px;
+  border: 2px solid #ff7eb3;
+}
+.clear-btn {
+  position: absolute;
+  top: 5px;
+  left: 105px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  border: none;
+  cursor: pointer;
+}
 .input-area {
   padding: 20px;
   background: #252525;

@@ -33,6 +33,23 @@ const isImage = (text) => {
 const scrollToBottom = () => {
   emit('image-loaded')
 }
+
+const extractImages = (content) => {
+  if (!content) return []
+  // SupabaseのURLを探す正規表現
+  const urlRegex =
+    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+  return content.match(urlRegex) || []
+}
+
+// 画像URL以外のテキスト部分だけを返す
+const renderText = (content) => {
+  if (!content) return ''
+  const urlRegex =
+    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+  // URL部分を空文字に置換して、残ったテキストをトリミング
+  return content.replace(urlRegex, '').trim()
+}
 </script>
 
 <template>
@@ -65,17 +82,23 @@ const scrollToBottom = () => {
           </button>
         </div>
       </div>
+
       <div v-else>
-        <template v-if="isImage(msg.content)">
+        <p v-if="renderText(msg.content)" class="text">
+          {{ renderText(msg.content) }}
+        </p>
+
+        <div
+          v-for="url in extractImages(msg.content)"
+          :key="url"
+        >
           <img
-            :src="msg.content"
+            :src="url"
             class="chat-image"
             @load="scrollToBottom"
           />
-        </template>
-        <p v-else class="text">{{ msg.content }}</p>
+        </div>
       </div>
-
       <div
         v-if="
           msg.user_name === currentUserName && !isEditing
