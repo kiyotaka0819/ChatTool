@@ -41,7 +41,10 @@ const handleRoomSelect = (room) => {
 }
 const isImage = (text) => {
   if (!text || typeof text !== 'string') return false
-  return text.startsWith('http') && text.includes('chat-attachments')
+  return (
+    text.startsWith('http') &&
+    text.includes('chat-attachments')
+  )
 }
 // リアルタイム購読
 const setupRealtime = () => {
@@ -184,7 +187,8 @@ const deleteMessage = async (msg) => {
   if (!confirm('このメッセージを削除しますか？')) return
 
   // 1. メッセージ内から画像URLをすべて抽出
-  const urlRegex = /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+  const urlRegex =
+    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
   const foundUrls = msg.content.match(urlRegex) || []
 
   // 2. 抽出したURLがあればストレージから削除
@@ -193,11 +197,13 @@ const deleteMessage = async (msg) => {
       // URLからファイルパスを抜き出す
       const filePath = url.split('/chat-attachments/')[1]
       if (filePath) {
-        const { error: storageError } = await supabase.storage
-          .from('chat-attachments')
-          .remove([filePath])
-        
-        if (storageError) console.error('ストレージ削除失敗:', storageError)
+        const { error: storageError } =
+          await supabase.storage
+            .from('chat-attachments')
+            .remove([filePath])
+
+        if (storageError)
+          console.error('ストレージ削除失敗:', storageError)
       }
     }
   }
@@ -211,7 +217,9 @@ const deleteMessage = async (msg) => {
   if (error) {
     alert('削除失敗：' + error.message)
   } else {
-    messages.value = messages.value.filter((m) => m.id !== msg.id)
+    messages.value = messages.value.filter(
+      (m) => m.id !== msg.id
+    )
   }
 }
 
@@ -233,6 +241,27 @@ const leaveRoom = () => {
   currentRoom.value = null
   messages.value = []
   isAllLoaded.value = false
+}
+
+// 通知のオンオフを切り替える関数
+const toggleNotification = async () => {
+  if (!isNotificationEnabled.value) {
+    // 許可を取る
+    const permission =
+      await Notification.requestPermission()
+    if (permission !== 'granted') {
+      alert(
+        '通知がブロックされました。ブラウザの設定から許可してください。'
+      )
+      return
+    }
+  }
+  // 状態を反転させて保存
+  isNotificationEnabled.value = !isNotificationEnabled.value
+  localStorage.setItem(
+    'chat-notify',
+    isNotificationEnabled.value
+  )
 }
 </script>
 
@@ -257,6 +286,19 @@ const leaveRoom = () => {
           >
           <button @click="leaveRoom" class="leave-btn">
             退室
+          </button>
+          <button
+            @click="toggleNotification"
+            :class="[
+              'notify-btn',
+              { active: isNotificationEnabled }
+            ]"
+          >
+            {{
+              isNotificationEnabled
+                ? '🔔 通知ON'
+                : '🔕 通知OFF'
+            }}
           </button>
         </div>
       </header>
@@ -366,23 +408,23 @@ header {
   gap: 10px;
 }
 
-/* 通知ボタン */
 .notify-btn {
   background: #333;
   color: #bbb;
-  padding: 8px 16px;
+  padding: 6px 12px;
   font-size: 0.75rem;
-  border: none;
-  border-radius: 20px;
+  border: 1px solid #444;
+  border-radius: 12px;
   cursor: pointer;
   transition: 0.3s;
+  margin-left: 10px;
 }
 
 .notify-btn.active {
-  background: linear-gradient(135deg, #4facfe, #00f2fe);
-  color: white;
+  background: rgba(79, 172, 254, 0.2);
+  color: #4facfe;
+  border-color: #4facfe;
 }
-
 /* スクロールバーの調整（ここも暗くしないと浮く） */
 .chat-window::-webkit-scrollbar {
   width: 6px;
