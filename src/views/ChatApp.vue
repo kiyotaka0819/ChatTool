@@ -224,6 +224,20 @@ const deleteMessage = async (msg) => {
 }
 
 const updateMessage = async (id, newContent) => {
+  // 1. 空文字チェック
+  if (!newContent || newContent.trim() === '') {
+    alert('中身が空です')
+    return
+  }
+
+  // 2. 文字数チェック
+  const MAX_CHARS = 1000 
+  if (newContent.length > MAX_CHARS) {
+    alert(`${MAX_CHARS}文字以内にしてください。（今は${newContent.length}文字）`)
+    return
+  }
+
+  // 3. 問題なければSupabaseを更新
   const { error } = await supabase
     .from('messages')
     .update({ content: newContent })
