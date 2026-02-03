@@ -1,16 +1,18 @@
-import { createRouter, createWebHistory } from 'vue-router'
 import ChatApp from '../views/ChatApp.vue'
+import {
+  createRouter,
+  createWebHashHistory
+} from 'vue-router'
 
 const router = createRouter({
-  // GitHub Pagesにデプロイすることを考えて、ベースURLを設定
-  history: createWebHistory(import.meta.env.BASE_URL),
+  // ★ここもHashに変更。BASE_URLの設定は不要になるで
+  history: createWebHashHistory(),
   routes: [
     {
       path: '/',
       name: 'chat',
       component: ChatApp
     }
-    // 今後「About」とか「Profile」を増やすならここに追加
   ]
 })
 

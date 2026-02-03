@@ -1,0 +1,32 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ] # mainブランチにプッシュしたら発動
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: node/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install and Build
+        run: |
+          npm install
+          npm run build
+        env:
+          # ★ここでGitHubの設定画面で登録した「Variables」を読み込む
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist # Viteが書き出したフォルダを公開する
+          branch: gh-pages # 公開用の専用ブランチに自動で送る
