@@ -19,6 +19,7 @@ const fetchRooms = async () => {
 const createRoom = async () => {
   if (!roomNameInput.value || !roomPasswordInput.value)
     return alert('入力してください')
+
   const { data, error } = await supabase
     .from('rooms')
     .insert([
@@ -29,7 +30,15 @@ const createRoom = async () => {
     ])
     .select()
     .single()
-  if (error) return alert('作成失敗しました')
+
+  if (error) {
+    if (error.code === '23505') {
+      return alert('そのルーム名は既にあります。別の名前にしてください。')
+    }
+    console.error(error)
+    return alert('作成失敗しました：' + error.message)
+  }
+
   emit('select', data)
 }
 
@@ -39,12 +48,13 @@ const joinRoom = async () => {
     .select('*')
     .eq('name', roomNameInput.value)
     .eq('password', roomPasswordInput.value)
-    .single()
+    .maybeSingle()
+
   if (error || !data)
     return alert('パスワードか部屋名が違います')
+    
   emit('select', data)
 }
-
 const selectFromList = (room) => {
   roomNameInput.value = room.name
 }
