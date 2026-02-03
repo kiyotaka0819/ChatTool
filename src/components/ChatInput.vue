@@ -13,7 +13,7 @@ watch(newMessage, (val) => {
   // 文字が入ってるときだけ「入力中」にする
   if (val.length > 0) {
     emit('typing', true)
-    
+
     // 3秒間入力が止まったら「停止」を送る
     clearTimeout(typingTimeout)
     typingTimeout = setTimeout(() => {
@@ -26,13 +26,15 @@ watch(newMessage, (val) => {
 
 const handleSend = () => {
   // 画像もテキストも空なら何もしない
-  if (!newMessage.value.trim() && !pendingImage.value) return
+  if (!newMessage.value.trim() && !pendingImage.value)
+    return
   // メッセージを組み立てる
   const content = pendingImage.value || newMessage.value
   // もしテキストも画像も両方あるなら、合体させて送る
-  const finalContent = pendingImage.value && newMessage.value.trim() 
-    ? `${newMessage.value}\n${pendingImage.value}` 
-    : content
+  const finalContent =
+    pendingImage.value && newMessage.value.trim()
+      ? `${newMessage.value}\n${pendingImage.value}`
+      : content
   emit('send', finalContent)
   // 送信後は全部空にする
   newMessage.value = ''
@@ -45,7 +47,8 @@ const handlePaste = async (event) => {
   const item = event.clipboardData.items[0]
   if (item?.type.indexOf('image') !== -1) {
     const file = item.getAsFile()
-    if (!file || file.size > 2 * 1024 * 1024) return alert('3MB以下にしてください')
+    if (!file || file.size > 2 * 1024 * 1024)
+      return alert('3MB以下にしてください')
 
     const fileName = `${Math.random()}.${file.name.split('.').pop()}`
     const { data, error } = await supabase.storage
@@ -54,7 +57,9 @@ const handlePaste = async (event) => {
 
     if (error) return alert('アップ失敗：' + error.message)
 
-    const { data: { publicUrl } } = supabase.storage
+    const {
+      data: { publicUrl }
+    } = supabase.storage
       .from('chat-attachments')
       .getPublicUrl(`chat-images/${fileName}`)
 
@@ -63,7 +68,29 @@ const handlePaste = async (event) => {
   }
 }
 
-const clearImage = () => {
+const clearImage = async () => {
+  if (!pendingImage.value) return
+
+  // 1. URLからストレージ内のパスを抜き出す
+  // 例: https://.../chat-attachments/chat-images/0.123.png -> chat-images/0.123.png
+  const filePath = pendingImage.value.split(
+    '/chat-attachments/'
+  )[1]
+
+  if (filePath) {
+    const { error } = await supabase.storage
+      .from('chat-attachments')
+      .remove([filePath])
+
+    if (error) {
+      console.error(
+        'キャンセル時のストレージ削除失敗:',
+        error.message
+      )
+    }
+  }
+
+  // 2. プレビューを消す
   pendingImage.value = null
 }
 </script>
@@ -72,7 +99,9 @@ const clearImage = () => {
   <div class="input-container">
     <div v-if="pendingImage" class="image-preview">
       <img :src="pendingImage" />
-      <button @click="clearImage" class="clear-btn">×</button>
+      <button @click="clearImage" class="clear-btn">
+        ×
+      </button>
     </div>
 
     <div class="input-area">
@@ -82,7 +111,10 @@ const clearImage = () => {
         placeholder="メッセージを入力..."
         @paste="handlePaste"
       ></textarea>
-      <button @click="handleSend" :disabled="!newMessage.trim() && !pendingImage">
+      <button
+        @click="handleSend"
+        :disabled="!newMessage.trim() && !pendingImage"
+      >
         送信
       </button>
     </div>
@@ -110,7 +142,7 @@ const clearImage = () => {
   position: absolute;
   top: 5px;
   left: 105px;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.7);
   color: white;
   border-radius: 50%;
   width: 20px;
