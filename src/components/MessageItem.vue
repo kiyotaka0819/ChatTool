@@ -2,7 +2,11 @@
 import { ref } from 'vue'
 
 const props = defineProps(['msg', 'currentUserName'])
-const emit = defineEmits(['delete', 'update'])
+const emit = defineEmits([
+  'delete',
+  'update',
+  'image-loaded'
+])
 
 const isEditing = ref(false)
 const editContent = ref(props.msg.content)
@@ -13,28 +17,73 @@ const handleUpdate = () => {
 }
 
 const formatTime = (dateString) =>
-  new Date(dateString).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  new Date(dateString).toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+// 画像かどうかを判定する簡易的な関数
+const isImage = (text) => {
+  return (
+    text.startsWith('http') &&
+    (text.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+      text.includes('chat-attachments'))
+  )
+}
+const scrollToBottom = () => {
+  emit('image-loaded')
+}
 </script>
 
 <template>
-  <div :class="['msg-row', { 'is-mine': msg.user_name === currentUserName }]">
+  <div
+    :class="[
+      'msg-row',
+      { 'is-mine': msg.user_name === currentUserName }
+    ]"
+  >
     <div class="bubble">
-      <div class="meta">{{ msg.user_name }} • {{ formatTime(msg.created_at) }}</div>
+      <div class="meta">
+        {{ msg.user_name }} •
+        {{ formatTime(msg.created_at) }}
+      </div>
 
       <div v-if="isEditing">
-        <textarea v-model="editContent" class="edit-area"></textarea>
+        <textarea
+          v-model="editContent"
+          class="edit-area"
+        ></textarea>
         <div class="edit-actions">
-          <button @click="handleUpdate" class="mini-save">保存</button>
-          <button @click="isEditing = false" class="mini-cancel">中止</button>
+          <button @click="handleUpdate" class="mini-save">
+            保存
+          </button>
+          <button
+            @click="isEditing = false"
+            class="mini-cancel"
+          >
+            中止
+          </button>
         </div>
       </div>
       <div v-else>
-        <p class="text">{{ msg.content }}</p>
+        <template v-if="isImage(msg.content)">
+          <img
+            :src="msg.content"
+            class="chat-image"
+            @load="scrollToBottom"
+          />
+        </template>
+        <p v-else class="text">{{ msg.content }}</p>
       </div>
 
-      <div v-if="msg.user_name === currentUserName && !isEditing" class="actions">
+      <div
+        v-if="
+          msg.user_name === currentUserName && !isEditing
+        "
+        class="actions"
+      >
         <span @click="isEditing = true">編集</span>
-        <span @click="$emit('delete', msg.id)">削除</span>
+        <span @click="$emit('delete', msg)">削除</span>
       </div>
     </div>
   </div>
@@ -117,5 +166,13 @@ const formatTime = (dateString) =>
   color: white;
   font-size: 0.7rem;
   padding: 3px 10px;
+}
+.chat-image {
+  display: block;
+  min-width: 50px; /* 読み込み前でも場所を確保 */
+  min-height: 50px;
+  background: #2a2a2a; /* 読み込み中だとわかるように背景色を付ける */
+  max-width: 100%;
+  border-radius: 8px;
 }
 </style>

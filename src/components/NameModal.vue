@@ -19,17 +19,15 @@ const handleConfirm = () => {
     <div class="name-modal">
       <h2>Welcome to Chat</h2>
       <p class="subtitle">あなたのお名前を教えてください</p>
-      
-      <input 
-        v-model="localName" 
-        @keyup.enter="handleConfirm" 
+
+      <input
+        v-model="localName"
+        @keyup.enter="handleConfirm"
         placeholder="名前を入力..."
         autofocus
       />
-      
-      <button @click="handleConfirm" :disabled="!localName.trim()">
-        チャットを開始する
-      </button>
+
+      <button @click="handleConfirm" :disabled="!localName.trim()">チャットを開始する</button>
     </div>
   </div>
 </template>

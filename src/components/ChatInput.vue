@@ -1,13 +1,66 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { supabase } from '../lib/supabaseClient'
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'typing'])
 const newMessage = ref('')
+
+// --- 「入力中...」のロジック ---
+let typingTimeout = null
+
+watch(newMessage, (val) => {
+  // 文字が入ってるときだけ「入力中」にする
+  if (val.length > 0) {
+    emit('typing', true)
+    
+    // 3秒間入力が止まったら「停止」を送る
+    clearTimeout(typingTimeout)
+    typingTimeout = setTimeout(() => {
+      emit('typing', false)
+    }, 3000)
+  } else {
+    emit('typing', false)
+  }
+})
 
 const handleSend = () => {
   if (!newMessage.value.trim()) return
   emit('send', newMessage.value)
   newMessage.value = ''
+  emit('typing', false) // 送信したら入力中を解除
+}
+
+const handlePaste = async (event) => {
+  const item = event.clipboardData.items[0]
+  if (item?.type.indexOf('image') !== -1) {
+    const file = item.getAsFile()
+    if (!file) return
+
+    // 前に話したサイズリミット（2MB）
+    if (file.size > 2 * 1024 * 1024) {
+      alert('3MB以下の画像にしてください')
+      return
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Math.random()}.${fileExt}`
+    const filePath = `chat-images/${fileName}`
+
+    const { data, error } = await supabase.storage
+      .from('chat-attachments')
+      .upload(filePath, file)
+
+    if (error) {
+      alert('画像アップ失敗：' + error.message)
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-attachments')
+      .getPublicUrl(filePath)
+
+    emit('send', publicUrl)
+  }
 }
 </script>
 
@@ -17,8 +70,14 @@ const handleSend = () => {
       v-model="newMessage"
       @keydown.enter.exact.prevent="handleSend"
       placeholder="メッセージを入力... (Shift+Enterで改行)"
+      @paste="handlePaste"
     ></textarea>
-    <button @click="handleSend" :disabled="!newMessage.trim()">送信</button>
+    <button
+      @click="handleSend"
+      :disabled="!newMessage.trim()"
+    >
+      送信
+    </button>
   </div>
 </template>
 
