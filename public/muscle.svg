@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 320" fill="none">
+  <path d="M75,40 
+           C150,30 250,50 300,80 
+           C400,80 500,50 650,30 
+           C850,50 930,150 900,240 
+           C850,290 600,320 450,280 
+           C300,280 150,250 50,180 
+           C10,130 20,70 75,50 Z" 
+        stroke="currentColor" stroke-width="15" stroke-linejoin="round" stroke-linecap="round"/>
+  
+  <path d="M450,280 C480,200 520,150 580,150" 
+        stroke="currentColor" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+</svg>
