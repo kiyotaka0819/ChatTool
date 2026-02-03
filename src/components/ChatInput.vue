@@ -108,7 +108,8 @@ const clearImage = async () => {
       <textarea
         v-model="newMessage"
         @keydown.enter.exact.prevent="handleSend"
-        placeholder="メッセージを入力..."
+        maxlength="1000"
+        placeholder="メッセージを入力（1000文字まで）..."
         @paste="handlePaste"
       ></textarea>
       <button
