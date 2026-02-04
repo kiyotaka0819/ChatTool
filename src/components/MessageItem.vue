@@ -2,105 +2,108 @@
 import { computed, ref } from 'vue'
 import config from '../lib/consts.json'
 import { supabase } from '../lib/supabaseClient'
-const props = defineProps([
-  'msg',
-  'currentUserName',
-  'allUsers',
-  'reactions'
-])
-const emit = defineEmits([
-  'delete',
-  'update',
-  'image-loaded',
-  'reply'
-])
+import { extractImages, renderMessageHtml } from '../utils/messageFormatter'
 
+/**
+ * @typedef {Object} Props
+ * @property {Object} msg - メッセージ本体（id, content, user_name, created_atなど）
+ * @property {string} currentUserName - ログイン中のユーザー名
+ * @property {Array<string>} allUsers - ルーム内の全ユーザー（メンション判定用）
+ * @property {Array<Object>} reactions - 全メッセージに紐づくリアクションの平坦な配列
+ */
+const props = defineProps(['msg', 'currentUserName', 'allUsers', 'reactions'])
+
+/**
+ * @typedef {Object} Emits
+ * @property {Function} delete - メッセージ削除時
+ * @property {Function} update - メッセージ更新（編集）時
+ * @property {Function} image-loaded - 画像読み込み完了時（スクロール調整用）
+ * @property {Function} reply - 返信ボタンクリック時（入力欄にユーザー名セット用）
+ */
+const emit = defineEmits(['delete', 'update', 'image-loaded', 'reply'])
+
+// --- 状態管理 (Internal State) ---
+
+/** @type {import('vue').Ref<boolean>} 絵文字選択メニューの表示フラグ */
 const showEmojiMenu = ref(false)
+
+/** @type {import('vue').Ref<boolean>} メッセージ編集モードの切り替えフラグ */
 const isEditing = ref(false)
+
+/** @type {import('vue').Ref<string>} 編集中のメッセージ本文 */
 const editContent = ref(props.msg.content)
+
+/** @type {import('vue').Ref<string|null>} 現在リアクションしたユーザーリストを表示している絵文字 */
 const activeEmoji = ref(null)
 
+// --- 表示用データ（Computed Properties） ---
+
+/**
+ * メッセージ内から画像URL（Supabase Storage）を抽出した配列
+ * @returns {Array<string>}
+ */
+const imageUrls = computed(() => extractImages(props.msg.content))
+
+/**
+ * メンションのハイライトやURL除去済みの整形済みHTML
+ * @returns {string}
+ */
+const formattedHtml = computed(() => renderMessageHtml(props.msg.content, props.allUsers))
+
+/**
+ * メッセージ送信時刻（HH:mm形式）
+ * @returns {string}
+ */
+const formattedTime = computed(() => {
+  return new Date(props.msg.created_at).toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+})
+
+/**
+ * このメッセージに紐づくリアクションを絵文字ごとにグループ化
+ * 形式: { "👍": ["user1", "user2"], "🔥": ["user3"] }
+ * @returns {Object.<string, Array<string>>}
+ */
+const groupedReactions = computed(() => {
+  const relevant = (props.reactions || []).filter(
+    (r) => r.message_id === props.msg.id
+  )
+  const groups = {}
+  relevant.forEach((r) => {
+    if (!groups[r.emoji]) groups[r.emoji] = []
+    if (!groups[r.emoji].includes(r.user_name))
+      groups[r.emoji].push(r.user_name)
+  })
+  return groups
+})
+
+// --- アクション（Methods） ---
+
+/**
+ * 特定の絵文字をリアクションしたユーザーリストの表示/非表示を切り替える
+ * @param {string} emoji - 対象の絵文字
+ */
 const toggleNames = (emoji) => {
-  // 同じ絵文字を叩いたら閉じる、違うの叩いたら切り替え
-  activeEmoji.value =
-    activeEmoji.value === emoji ? null : emoji
+  activeEmoji.value = activeEmoji.value === emoji ? null : emoji
 }
 
+/**
+ * 編集した内容を親コンポーネントに通知し、編集モードを終了する
+ */
 const handleUpdate = () => {
   emit('update', props.msg.id, editContent.value)
   isEditing.value = false
 }
 
-const formatTime = (dateString) =>
-  new Date(dateString).toLocaleTimeString('ja-JP', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-
-// 画像かどうかを判定する簡易的な関数
-const isImage = (text) => {
-  return (
-    text.startsWith('http') &&
-    (text.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
-      text.includes('chat-attachments'))
-  )
-}
-const scrollToBottom = () => {
-  emit('image-loaded')
-}
-
-const extractImages = (content) => {
-  if (!content) return []
-  // SupabaseのURLを探す正規表現
-  const urlRegex =
-    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
-  return content.match(urlRegex) || []
-}
-
-// 画像URL以外のテキスト部分だけを返す
-const renderText = (content) => {
-  if (!content) return ''
-  const urlRegex =
-    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
-  // URL部分を空文字に置換して、残ったテキストをトリミング
-  return content.replace(urlRegex, '').trim()
-}
-
-const renderContent = (content) => {
-  if (!content) return ''
-  const urlRegex =
-    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
-  let text = content.replace(urlRegex, '').trim()
-
-  const mentionRegex = /(@[^@\s\n]+)/g
-
-  return text.replace(mentionRegex, (match) => {
-    const userName = match.slice(1) // @を取る
-    // その名前がルーム内に実在するかチェック
-    if (props.allUsers.includes(userName)) {
-      return `<span class="mention-tag">${match}</span>`
-    }
-    // いなければ、ただのテキストとして返す
-    return match
-  })
-}
-
-// このメッセージに紐づくリアクションを整理
-const messageReactions = computed(() => {
-  const list = (props.reactions || []).filter(
-    (r) => r.message_id === props.msg.id
-  )
-  const counts = {}
-  list.forEach((r) => {
-    counts[r.emoji] = (counts[r.emoji] || 0) + 1
-  })
-  return counts
-})
-
-// リアクション追加関数
-// リアクション追加・取り消し関数
+/**
+ * リアクションのトグル処理（既にあれば削除、なければ追加）
+ * @param {string} emoji - 追加・削除する絵文字
+ * @returns {Promise<void>}
+ */
 const addReaction = async (emoji) => {
-  // すでに自分がこのメッセージに、この絵文字でリアクションしてるか探す
+  // 自分の同一リアクションが存在するか確認
   const existingReaction = (props.reactions || []).find(
     (r) =>
       r.message_id === props.msg.id &&
@@ -109,56 +112,28 @@ const addReaction = async (emoji) => {
   )
 
   if (existingReaction) {
-    console.log('Removing reaction:', existingReaction.id)
+    // 【削除】既にリアクション済みならDBから消す
     const { error } = await supabase
       .from('reactions')
       .delete()
       .eq('id', existingReaction.id)
-
-    if (error) {
-      console.error('Reaction Delete Error:', error.message)
-      alert('リアクション削除失敗: ' + error.message)
-    }
+    if (error) alert('リアクション削除失敗')
   } else {
-    console.log('Adding reaction:', emoji)
+    // 【追加】未リアクションならDBに挿入
     const { error } = await supabase
       .from('reactions')
       .insert([
         {
           message_id: props.msg.id,
           user_name: props.currentUserName,
-          emoji: emoji
+          emoji
         }
       ])
-
-    if (error) {
-      console.error('Reaction Insert Error:', error.message)
-      alert('リアクション失敗: ' + error.message)
-    }
+    if (error) alert('リアクション失敗')
   }
-
+  // 完了後にメニューを閉じる
   showEmojiMenu.value = false
 }
-
-// このメッセージに付いたリアクションだけを抽出し、絵文字ごとに名前をまとめる
-const groupedReactions = computed(() => {
-  const relevant = props.reactions.filter(
-    (r) => r.message_id === props.msg.id
-  )
-  const groups = {}
-
-  relevant.forEach((r) => {
-    if (!groups[r.emoji]) {
-      groups[r.emoji] = []
-    }
-    // その絵文字にまだ名前が入ってなければ追加
-    if (!groups[r.emoji].includes(r.user_name)) {
-      groups[r.emoji].push(r.user_name)
-    }
-  })
-
-  return groups
-})
 </script>
 
 <template>
@@ -172,23 +147,40 @@ const groupedReactions = computed(() => {
     <div class="bubble">
       <div class="meta">
         <strong>{{ msg.user_name }}</strong>
-        <small>{{ formatTime(msg.created_at) }}</small>
+        <small>{{ formattedTime }}</small>
       </div>
+
       <div v-if="!isEditing">
         <p
-          v-if="renderContent(msg.content)"
+          v-if="formattedHtml"
           class="text"
-          v-html="renderContent(msg.content)"
+          v-html="formattedHtml"
         ></p>
-        <div
-          v-for="url in extractImages(msg.content)"
-          :key="url"
-        >
+
+        <div v-for="url in imageUrls" :key="url">
           <img
             :src="url"
             class="chat-image"
-            @load="scrollToBottom"
+            @load="$emit('image-loaded')"
           />
+        </div>
+      </div>
+
+      <div v-else>
+        <textarea
+          v-model="editContent"
+          class="edit-area"
+        ></textarea>
+        <div class="edit-actions">
+          <button @click="handleUpdate" class="mini-save">
+            保存
+          </button>
+          <button
+            @click="isEditing = false"
+            class="mini-cancel"
+          >
+            キャンセル
+          </button>
         </div>
       </div>
 
@@ -208,7 +200,6 @@ const groupedReactions = computed(() => {
           >
             {{ emoji }} {{ users.length }}
           </span>
-
           <div
             v-if="activeEmoji === emoji"
             class="name-list-popup"
@@ -220,11 +211,10 @@ const groupedReactions = computed(() => {
 
       <div class="actions">
         <span
-          @click="showEmojiMenu = !showEmojiMenu"
+          @click.stop="showEmojiMenu = !showEmojiMenu"
           class="action-btn"
           >＋☺</span
         >
-
         <template v-if="msg.user_name === currentUserName">
           <span @click="isEditing = true">編集</span>
           <span @click="$emit('delete', msg)">削除</span>
@@ -235,6 +225,7 @@ const groupedReactions = computed(() => {
           >
         </template>
       </div>
+
       <div v-if="showEmojiMenu" class="mini-emoji-picker">
         <span
           v-for="e in config.QUICK_REACTIONS"

@@ -6,253 +6,93 @@ import {
   nextTick
 } from 'vue'
 import { supabase } from '../lib/supabaseClient'
+import { useChat } from '../composables/useChat'
+
+// コンポーネントのインポート
 import MessageItem from '../components/MessageItem.vue'
 import ChatInput from '../components/ChatInput.vue'
 import NameModal from '../components/NameModal.vue'
 import RoomSelector from '../components/RoomSelector.vue'
 
-// --- 状態管理 ---
-const messages = ref([]) // メッセージ一覧
-const isNameSet = ref(false) // 名前設定済みフラグ
-const isRoomSelected = ref(false) // ルーム選択済みフラグ
+/** * @typedef {Object} Room
+ * @property {number} id - ルームID
+ * @property {string} name - ルーム名
+ */
+
+// --- ユーザー状態管理 ---
+// ユーザー名（ローカルストレージと同期）
 const currentUserName = ref(
   localStorage.getItem('chat-user-name') || ''
 )
-const currentRoom = ref(null) // 現在選択中のルーム情報
-const chatEndRef = ref(null) // スクロール最下部検知用
-const isAllLoaded = ref(false) // 全メッセージ読み込み完了フラグ
-const isFetchingOlder = ref(false) // 過去ログ取得中フラグ
-const replyTarget = ref('') // リプライ先のユーザー名
-const allRoomUsers = ref([]) // ルーム内に過去発言したユーザー一覧
-const allReactions = ref([]) // ★全メッセージに対するリアクションデータ
-// リアルタイム通信用のチャネル保持
-let roomChannel = null
-let reactionsChannel = null
+// 名前入力が完了したか
+const isNameSet = ref(false)
+// ルーム選択が完了したか
+const isRoomSelected = ref(false)
+// 現在参加中のルーム情報
+const currentRoom = ref(null)
+// チャット最下部アンカー要素
+const chatEndRef = ref(null)
+// 返信先のユーザー名（@マーク含む）
+const replyTarget = ref('')
 
+// --- 通知設定 ---
+/** @type {import('vue').Ref<boolean>} ブラウザ通知が有効かどうか */
 const isNotificationEnabled = ref(
   localStorage.getItem('chat-notify') === 'true'
 )
-const typingUsers = ref([]) // 入力中のユーザーリスト
 
+// --- useChat Composable から状態とメソッドを抽出 ---
+const {
+  messages,
+  allReactions,
+  typingUsers,
+  allRoomUsers,
+  isAllLoaded,
+  isFetchingOlder,
+  fetchMessages,
+  fetchAllRoomUsers,
+  setupRealtime,
+  handleTyping,
+  cleanup
+} = useChat(currentUserName)
+
+/**
+ * 初期化処理：名前が保存されていればモーダルをスキップ
+ */
 onMounted(() => {
   if (currentUserName.value) isNameSet.value = true
 })
 
-// ルーム決定後の初期化処理
+/**
+ * ルーム選択時のハンドラ
+ * データの取得とリアルタイム購読の開始を行う
+ * @param {Room} room 選択されたルームオブジェクト
+ */
 const handleRoomSelect = async (room) => {
   currentRoom.value = room
   isRoomSelected.value = true
 
-  // 1. ユーザーリストを取得
-  await fetchAllRoomUsers()
-  // 2. メッセージとリアクションの取得、リアルタイム購読開始
-  fetchMessages()
-  setupRealtime()
+  // 1. ルームのコンテキスト（ユーザー・メッセージ）を準備
+  await fetchAllRoomUsers(room.id)
+  await fetchMessages(room.id)
+
+  // 2. リアルタイム通信のセットアップ
+  setupRealtime(room.id, (p) => {
+    // 自分以外のメッセージ受信時に通知を飛ばす
+    if (p.new.user_name !== currentUserName.value)
+      sendBrowserNotification(p)
+    scrollToBottom()
+  })
+
+  // 3. 初期表示時のスクロール調整
+  await nextTick()
+  scrollToBottom(true)
 }
 
 /**
- * リアルタイム購読の設定
- * メッセージの更新、ユーザーの入力中状態、リアクションの同期をすべてここで管理します。
+ * 新規メッセージの送信
+ * @param {string} content メッセージ本文
  */
-const setupRealtime = () => {
-  // 1. 既存のチャネルがあれば一度削除（二重購読によるメモリリークや重複検知を防止）
-  if (roomChannel) supabase.removeChannel(roomChannel)
-  if (reactionsChannel)
-    supabase.removeChannel(reactionsChannel)
-
-  // ---------------------------------------------------------
-  // 【A】ルーム内メッセージ・ユーザー状態用チャネル
-  // ---------------------------------------------------------
-  roomChannel = supabase.channel(
-    `room-${currentRoom.value.id}`
-  )
-
-  roomChannel
-    // Presence: 他のユーザーが入力中かどうかを同期
-    .on('presence', { event: 'sync' }, () => {
-      const state = roomChannel.presenceState()
-      typingUsers.value = Object.values(state)
-        .flat()
-        .filter(
-          (user) =>
-            user.user_name !== currentUserName.value &&
-            user.isTyping
-        )
-        .map((user) => user.user_name)
-    })
-    // Postgres Changes: messagesテーブルのINSERT/UPDATE/DELETEを監視
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'messages',
-        filter: `room_id=eq.${currentRoom.value.id}` // このルームのメッセージのみ
-      },
-      (p) => {
-        if (p.eventType === 'INSERT') {
-          // 新着メッセージを配列の最後に追加
-          messages.value.push(p.new)
-          // 自分以外の発言ならブラウザ通知を飛ばす
-          if (p.new.user_name !== currentUserName.value) {
-            sendBrowserNotification(p)
-          }
-          scrollToBottom()
-        } else if (p.eventType === 'UPDATE') {
-          // 既存メッセージの編集（内容更新）
-          const idx = messages.value.findIndex(
-            (m) => m.id === p.new.id
-          )
-          if (idx !== -1) messages.value[idx] = p.new
-        } else if (p.eventType === 'DELETE') {
-          // メッセージ削除
-          messages.value = messages.value.filter(
-            (m) => m.id !== p.old.id
-          )
-        }
-      }
-    )
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        // 接続完了時に自分の初期状態（入力中=false）をトラッキング開始
-        await roomChannel.track({
-          user_name: currentUserName.value,
-          isTyping: false
-        })
-      }
-    })
-
-  // ---------------------------------------------------------
-  // 【B】リアクション同期用チャネル
-  // ---------------------------------------------------------
-  // ⚠️ ここで reactionsChannel に代入し、確実に allReactions を参照できるようにする
-  reactionsChannel = supabase
-    .channel('public:reactions')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'reactions' },
-      (payload) => {
-        console.log('Realtime reaction payload:', payload)
-
-        // 現在画面に表示されているメッセージに関連するリアクションかチェック
-        const isVisible = messages.value.some(
-          (m) =>
-            m.id ===
-            (payload.new?.message_id ||
-              payload.old?.message_id)
-        )
-
-        // 関係ないメッセージのリアクションなら無視
-        if (!isVisible) return
-
-        if (payload.eventType === 'INSERT') {
-          // 新しいリアクションを配列に追加（スプレッド構文でリアクティブに更新）
-          allReactions.value = [
-            ...allReactions.value,
-            payload.new
-          ]
-        } else if (payload.eventType === 'DELETE') {
-          // 削除されたリアクションを配列から取り除く
-          allReactions.value = allReactions.value.filter(
-            (r) => r.id !== payload.old.id
-          )
-        }
-      }
-    )
-    .subscribe()
-}
-
-// 入力中ステータスの更新
-const handleTyping = async (isTyping) => {
-  if (roomChannel) {
-    await roomChannel.track({
-      user_name: currentUserName.value,
-      isTyping
-    })
-  }
-}
-
-// ユーザーリストの取得（メンション候補用）
-const fetchAllRoomUsers = async () => {
-  if (!currentRoom.value) return
-  const { data, error } = await supabase
-    .from('messages')
-    .select('user_name')
-    .eq('room_id', currentRoom.value.id)
-
-  if (!error && data) {
-    const uniqueNames = [
-      ...new Set(data.map((m) => m.user_name))
-    ]
-    allRoomUsers.value = uniqueNames
-  }
-}
-
-// メッセージ取得
-const fetchMessages = async (isMore = false) => {
-  if (
-    !currentRoom.value ||
-    (isMore && (isAllLoaded.value || isFetchingOlder.value))
-  )
-    return
-
-  const chatWindow = document.querySelector('.chat-window')
-  const previousScrollHeight = chatWindow
-    ? chatWindow.scrollHeight
-    : 0
-
-  if (isMore) isFetchingOlder.value = true
-
-  let q = supabase
-    .from('messages')
-    .select('*')
-    .eq('room_id', currentRoom.value.id)
-    .order('created_at', { ascending: false })
-    .limit(30)
-
-  if (isMore && messages.value.length > 0)
-    q = q.lt('created_at', messages.value[0].created_at)
-
-  const { data, error } = await q
-  if (!error) {
-    if (data.length < 30) isAllLoaded.value = true
-    const fetchedMsgs = [...data].reverse()
-
-    if (isMore) {
-      messages.value = [...fetchedMsgs, ...messages.value]
-    } else {
-      messages.value = fetchedMsgs
-    }
-
-    // 表示されたメッセージに対応するリアクションを取得
-    await fetchReactionsForVisibleMessages()
-
-    await nextTick()
-    if (isMore && chatWindow) {
-      chatWindow.scrollTop =
-        chatWindow.scrollHeight - previousScrollHeight
-    } else {
-      scrollToBottom(true)
-    }
-  }
-  isFetchingOlder.value = false
-}
-
-// 表示中メッセージのリアクションを一括取得
-const fetchReactionsForVisibleMessages = async () => {
-  if (messages.value.length === 0) return
-  const messageIds = messages.value.map((m) => m.id)
-  const { data, error } = await supabase
-    .from('reactions')
-    .select('*')
-    .in('message_id', messageIds)
-
-  if (!error) {
-    allReactions.value = data
-  }
-}
-
-// メッセージ送信
 const sendMessage = async (content) => {
   const { error } = await supabase.from('messages').insert([
     {
@@ -261,6 +101,8 @@ const sendMessage = async (content) => {
       room_id: currentRoom.value.id
     }
   ])
+
+  // ユーザーリストの動的更新（初回発言時用）
   if (
     !error &&
     !allRoomUsers.value.includes(currentUserName.value)
@@ -269,18 +111,67 @@ const sendMessage = async (content) => {
   }
 }
 
-// スクロール制御
+/**
+ * メッセージの削除
+ * @param {Object} msg 削除対象のメッセージオブジェクト
+ */
+const deleteMessage = async (msg) => {
+  if (!confirm('削除しますか？')) return
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .eq('id', msg.id)
+  if (error) alert('削除失敗')
+}
+
+/**
+ * メッセージの編集保存
+ * @param {number} id メッセージID
+ * @param {string} newContent 更新後の本文
+ */
+const updateMessage = async (id, newContent) => {
+  const { error } = await supabase
+    .from('messages')
+    .update({ content: newContent })
+    .eq('id', id)
+  if (error) alert('更新失敗')
+}
+
+// --- ユーティリティ・表示制御 ---
+
+/**
+ * 画面を最下部までスクロールさせる
+ * DOM更新とレンダリングの遅延を考慮した3段構えの実行
+ * @param {boolean} [instant=false] アニメーションを無効にするか
+ */
 const scrollToBottom = (instant = false) => {
   nextTick(() => {
-    if (chatEndRef.value)
-      chatEndRef.value.scrollIntoView({
-        behavior: instant ? 'auto' : 'smooth',
-        block: 'end'
-      })
+    const performScroll = () => {
+      // アンカー要素へのスクロールを試行
+      if (chatEndRef.value) {
+        chatEndRef.value.scrollIntoView({
+          behavior: instant ? 'auto' : 'smooth',
+          block: 'end'
+        })
+      }
+      // フォールバック：親要素の scrollTop を直接操作
+      const chatWindow =
+        document.querySelector('.chat-window')
+      if (chatWindow) {
+        chatWindow.scrollTop = chatWindow.scrollHeight
+      }
+    }
+
+    performScroll() // 直後
+    setTimeout(performScroll, 100) // 描画待ち1
+    setTimeout(performScroll, 300) // 描画待ち2（画像等）
   })
 }
 
-// ブラウザ通知
+/**
+ * ブラウザ通知の送信
+ * @param {Object} p Supabaseのペイロード
+ */
 const sendBrowserNotification = (p) => {
   if (
     isNotificationEnabled.value &&
@@ -292,61 +183,9 @@ const sendBrowserNotification = (p) => {
   }
 }
 
-// メッセージ削除
-const deleteMessage = async (msg) => {
-  if (
-    !msg ||
-    !msg.id ||
-    !confirm('このメッセージを削除しますか？')
-  )
-    return
-
-  const urlRegex =
-    /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
-  const foundUrls = msg.content.match(urlRegex) || []
-
-  if (foundUrls.length > 0) {
-    for (const url of foundUrls) {
-      const filePath = url.split('/chat-attachments/')[1]
-      if (filePath) {
-        await supabase.storage
-          .from('chat-attachments')
-          .remove([filePath])
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from('messages')
-    .delete()
-    .eq('id', msg.id)
-  if (error) alert('削除失敗：' + error.message)
-}
-
-// メッセージ更新
-const updateMessage = async (id, newContent) => {
-  if (!newContent || newContent.trim() === '')
-    return alert('中身が空です')
-  const { error } = await supabase
-    .from('messages')
-    .update({ content: newContent })
-    .eq('id', id)
-  if (error) alert('更新に失敗しました。')
-}
-
-// 退室処理
-const leaveRoom = () => {
-  if (!confirm('ルームから退出しますか？')) return
-  if (roomChannel) supabase.removeChannel(roomChannel)
-  if (reactionsChannel)
-    supabase.removeChannel(reactionsChannel)
-  isRoomSelected.value = false
-  currentRoom.value = null
-  messages.value = []
-  allReactions.value = []
-}
-
-// 通知トグル
+/**
+ * 通知のON/OFF切り替えと権限リクエスト
+ */
 const toggleNotification = async () => {
   if (!isNotificationEnabled.value) {
     const permission =
@@ -361,19 +200,56 @@ const toggleNotification = async () => {
   )
 }
 
-// 終了処理
-onBeforeUnmount(() => {
-  if (roomChannel) supabase.removeChannel(roomChannel)
-  if (reactionsChannel)
-    supabase.removeChannel(reactionsChannel)
-})
+/**
+ * 退出処理：状態のリセットとチャネルの切断
+ */
+const leaveRoom = () => {
+  if (!confirm('退室しますか？')) return
+  cleanup()
+  isRoomSelected.value = false
+  currentRoom.value = null
+}
 
+/**
+ * 返信の準備：入力欄にメンションを追加
+ * @param {string} userName 対象のユーザー名
+ */
 const prepareReply = (userName) => {
   replyTarget.value = `@${userName} `
 }
-
+/** 返信状態の解除 */
 const clearReply = () => {
   replyTarget.value = ''
+}
+
+// コンポーネント破棄時にリソースを解放
+onBeforeUnmount(() => cleanup())
+
+/**
+ * 過去ログの追加読み込み
+ * スクロール位置を維持しながら古いメッセージを取得する
+ */
+const loadMoreMessages = async () => {
+  if (
+    !currentRoom.value ||
+    isFetchingOlder.value ||
+    isAllLoaded.value
+  )
+    return
+
+  const chatWindow = document.querySelector('.chat-window')
+  const previousScrollHeight = chatWindow
+    ? chatWindow.scrollHeight
+    : 0
+
+  await fetchMessages(currentRoom.value.id, true)
+
+  // メッセージ追加後の「跳ね返り」を防止するスクロール位置調整
+  await nextTick()
+  if (chatWindow) {
+    chatWindow.scrollTop =
+      chatWindow.scrollHeight - previousScrollHeight
+  }
 }
 </script>
 
@@ -419,16 +295,12 @@ const clearReply = () => {
         class="chat-window"
         @scroll="
           (e) =>
-            e.target.scrollTop < 5 && fetchMessages(true)
+            e.target.scrollTop < 5 && loadMoreMessages()
         "
       >
-        <div
-          v-if="typingUsers.length > 0"
-          class="typing-indicator"
-        >
-          {{ typingUsers.join(', ') }} が入力中...
+        <div v-if="isFetchingOlder" class="loading-logs">
+          過去ログを読み込み中...
         </div>
-
         <MessageItem
           v-for="msg in messages"
           :key="msg.id"
@@ -441,6 +313,12 @@ const clearReply = () => {
           @image-loaded="scrollToBottom"
           @reply="prepareReply"
         />
+        <div
+          v-if="typingUsers.length > 0"
+          class="typing-indicator"
+        >
+          {{ typingUsers.join(', ') }} が入力中...
+        </div>
 
         <div ref="chatEndRef"></div>
       </div>
