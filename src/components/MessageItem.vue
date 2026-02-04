@@ -2,7 +2,10 @@
 import { computed, ref } from 'vue'
 import config from '../lib/consts.json'
 import { supabase } from '../lib/supabaseClient'
-import { extractImages, renderMessageHtml } from '../utils/messageFormatter'
+import {
+  extractImages,
+  renderMessageHtml
+} from '../utils/messageFormatter'
 
 /**
  * @typedef {Object} Props
@@ -11,7 +14,12 @@ import { extractImages, renderMessageHtml } from '../utils/messageFormatter'
  * @property {Array<string>} allUsers - ルーム内の全ユーザー（メンション判定用）
  * @property {Array<Object>} reactions - 全メッセージに紐づくリアクションの平坦な配列
  */
-const props = defineProps(['msg', 'currentUserName', 'allUsers', 'reactions'])
+const props = defineProps([
+  'msg',
+  'currentUserName',
+  'allUsers',
+  'reactions'
+])
 
 /**
  * @typedef {Object} Emits
@@ -20,7 +28,12 @@ const props = defineProps(['msg', 'currentUserName', 'allUsers', 'reactions'])
  * @property {Function} image-loaded - 画像読み込み完了時（スクロール調整用）
  * @property {Function} reply - 返信ボタンクリック時（入力欄にユーザー名セット用）
  */
-const emit = defineEmits(['delete', 'update', 'image-loaded', 'reply'])
+const emit = defineEmits([
+  'delete',
+  'update',
+  'image-loaded',
+  'reply'
+])
 
 // --- 状態管理 (Internal State) ---
 
@@ -42,23 +55,30 @@ const activeEmoji = ref(null)
  * メッセージ内から画像URL（Supabase Storage）を抽出した配列
  * @returns {Array<string>}
  */
-const imageUrls = computed(() => extractImages(props.msg.content))
+const imageUrls = computed(() =>
+  extractImages(props.msg.content)
+)
 
 /**
  * メンションのハイライトやURL除去済みの整形済みHTML
  * @returns {string}
  */
-const formattedHtml = computed(() => renderMessageHtml(props.msg.content, props.allUsers))
+const formattedHtml = computed(() =>
+  renderMessageHtml(props.msg.content, props.allUsers)
+)
 
 /**
  * メッセージ送信時刻（HH:mm形式）
  * @returns {string}
  */
 const formattedTime = computed(() => {
-  return new Date(props.msg.created_at).toLocaleTimeString('ja-JP', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return new Date(props.msg.created_at).toLocaleTimeString(
+    'ja-JP',
+    {
+      hour: '2-digit',
+      minute: '2-digit'
+    }
+  )
 })
 
 /**
@@ -86,7 +106,8 @@ const groupedReactions = computed(() => {
  * @param {string} emoji - 対象の絵文字
  */
 const toggleNames = (emoji) => {
-  activeEmoji.value = activeEmoji.value === emoji ? null : emoji
+  activeEmoji.value =
+    activeEmoji.value === emoji ? null : emoji
 }
 
 /**
@@ -444,5 +465,20 @@ select {
 .emoji-option.is-selected {
   background: rgba(255, 235, 59, 0.15);
   border-color: #ffeb3b;
+}
+
+:deep(.chat-link) {
+  color: #47fff3;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-decoration: underline;
+  font-weight: bold;
+  word-break: break-all;
+  transition: background 0.2s;
+}
+
+:deep(.chat-link:hover) {
+  background: rgba(255, 255, 255, 0.4);
 }
 </style>

@@ -20,7 +20,7 @@ watch(newMessage, (val) => {
   if (val.length > 0) {
     emit('typing', true)
     clearTimeout(typingTimeout)
-    typingTimeout = setTimeout(() => emit('typing', false), 3000)
+    typingTimeout = setTimeout(() => emit('typing', false), 10000)
   } else {
     emit('typing', false)
   }
