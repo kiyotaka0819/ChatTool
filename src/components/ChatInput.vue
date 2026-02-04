@@ -4,15 +4,19 @@ import { supabase } from '../lib/supabaseClient'
 
 // --- Props & Emits ---
 const props = defineProps(['replyTarget', 'allUsers'])
-const emit = defineEmits(['send', 'typing', 'replyProcessed'])
+const emit = defineEmits([
+  'send',
+  'typing',
+  'replyProcessed'
+])
 
 // --- 状態管理 ---
-const newMessage = ref('')           // 入力中のテキスト
-const pendingImage = ref(null)       // 送信待機中の画像URL
-const fileInput = ref(null)          // ファイル入力要素の参照
-const showSuggest = ref(false)       // サジェストの表示フラグ
-const filteredUsers = ref([])        // 絞り込まれたユーザーリスト
-const selectedIndex = ref(0)         // サジェスト選択中のインデックス
+const newMessage = ref('') // 入力中のテキスト
+const pendingImage = ref(null) // 送信待機中の画像URL
+const fileInput = ref(null) // ファイル入力要素の参照
+const showSuggest = ref(false) // サジェストの表示フラグ
+const filteredUsers = ref([]) // 絞り込まれたユーザーリスト
+const selectedIndex = ref(0) // サジェスト選択中のインデックス
 
 // --- 「入力中...」通知ロジック ---
 let typingTimeout = null
@@ -20,7 +24,10 @@ watch(newMessage, (val) => {
   if (val.length > 0) {
     emit('typing', true)
     clearTimeout(typingTimeout)
-    typingTimeout = setTimeout(() => emit('typing', false), 10000)
+    typingTimeout = setTimeout(
+      () => emit('typing', false),
+      10000
+    )
   } else {
     emit('typing', false)
   }
@@ -59,11 +66,16 @@ const handleKeydown = (e) => {
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     // 下に移動
-    selectedIndex.value = (selectedIndex.value + 1) % filteredUsers.value.length
+    selectedIndex.value =
+      (selectedIndex.value + 1) % filteredUsers.value.length
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     // 上に移動
-    selectedIndex.value = (selectedIndex.value - 1 + filteredUsers.value.length) % filteredUsers.value.length
+    selectedIndex.value =
+      (selectedIndex.value -
+        1 +
+        filteredUsers.value.length) %
+      filteredUsers.value.length
   } else if (e.key === 'Enter' || e.key === 'Tab') {
     e.preventDefault()
     // 選択中のユーザーで確定
@@ -75,19 +87,23 @@ const handleKeydown = (e) => {
 }
 
 // --- 返信予約（外部からの呼び出し）の監視 ---
-watch(() => props.replyTarget, (newVal) => {
-  if (newVal) {
-    newMessage.value = newVal + newMessage.value
-    emit('replyProcessed')
-    const textarea = document.querySelector('textarea')
-    textarea?.focus()
+watch(
+  () => props.replyTarget,
+  (newVal) => {
+    if (newVal) {
+      newMessage.value = newVal
+      emit('replyProcessed')
+      const textarea = document.querySelector('textarea')
+      textarea?.focus()
+    }
   }
-})
+)
 
 // --- 画像アップロード・送信処理 ---
 const processUpload = async (file) => {
-  if (!file || file.size > 3 * 1024 * 1024) return alert('3MB以下にしてください')
-  
+  if (!file || file.size > 3 * 1024 * 1024)
+    return alert('3MB以下にしてください')
+
   const fileName = `${Math.random()}.${file.name.split('.').pop()}`
   const { data, error } = await supabase.storage
     .from('chat-attachments')
@@ -95,7 +111,9 @@ const processUpload = async (file) => {
 
   if (error) return alert('アップ失敗：' + error.message)
 
-  const { data: { publicUrl } } = supabase.storage
+  const {
+    data: { publicUrl }
+  } = supabase.storage
     .from('chat-attachments')
     .getPublicUrl(`chat-images/${fileName}`)
 
@@ -105,9 +123,11 @@ const processUpload = async (file) => {
 const handleSend = () => {
   // サジェスト表示中は送信をガード（Enterキー重複防止）
   if (showSuggest.value) return
-  if (!newMessage.value.trim() && !pendingImage.value) return
+  if (!newMessage.value.trim() && !pendingImage.value)
+    return
 
-  const finalContent = pendingImage.value && newMessage.value.trim()
+  const finalContent =
+    pendingImage.value && newMessage.value.trim()
       ? `${newMessage.value}\n${pendingImage.value}`
       : pendingImage.value || newMessage.value
 
@@ -129,9 +149,13 @@ const handlePaste = async (event) => {
 // 選択画像のキャンセル（ストレージからも削除）
 const clearImage = async () => {
   if (!pendingImage.value) return
-  const filePath = pendingImage.value.split('/chat-attachments/')[1]
+  const filePath = pendingImage.value.split(
+    '/chat-attachments/'
+  )[1]
   if (filePath) {
-    await supabase.storage.from('chat-attachments').remove([filePath])
+    await supabase.storage
+      .from('chat-attachments')
+      .remove([filePath])
   }
   pendingImage.value = null
 }
@@ -139,7 +163,7 @@ const clearImage = async () => {
 const handleFileChange = async (event) => {
   const file = event.target.files[0]
   if (file) await processUpload(file)
-  event.target.value = '' 
+  event.target.value = ''
 }
 </script>
 
@@ -147,7 +171,9 @@ const handleFileChange = async (event) => {
   <div class="input-container">
     <div v-if="pendingImage" class="image-preview">
       <img :src="pendingImage" />
-      <button @click="clearImage" class="clear-btn">×</button>
+      <button @click="clearImage" class="clear-btn">
+        ×
+      </button>
     </div>
 
     <div class="input-area">
@@ -159,14 +185,19 @@ const handleFileChange = async (event) => {
         @change="handleFileChange"
       />
 
-      <button @click="fileInput.click()" class="file-btn">📷</button>
+      <button @click="fileInput.click()" class="file-btn">
+        📷
+      </button>
 
       <div v-if="showSuggest" class="mention-dropdown">
         <div
           v-for="(user, index) in filteredUsers"
           :key="user"
           @click="selectUser(user)"
-          :class="['suggest-item', { 'is-active': index === selectedIndex }]"
+          :class="[
+            'suggest-item',
+            { 'is-active': index === selectedIndex }
+          ]"
         >
           <span class="at-mark">@</span>{{ user }}
         </div>
@@ -183,7 +214,10 @@ const handleFileChange = async (event) => {
 
       <button
         @click="handleSend"
-        :disabled="(!newMessage.trim() && !pendingImage) || showSuggest"
+        :disabled="
+          (!newMessage.trim() && !pendingImage) ||
+          showSuggest
+        "
         class="send-btn"
       >
         送信
@@ -194,7 +228,10 @@ const handleFileChange = async (event) => {
 
 <style scoped>
 /* モバイル対応：ズーム防止 */
-input, textarea { font-size: 16px !important; }
+input,
+textarea {
+  font-size: 16px !important;
+}
 
 .input-container {
   display: flex;
@@ -257,8 +294,13 @@ input, textarea { font-size: 16px !important; }
   background: #ff7eb3;
   color: white;
 }
-.at-mark { color: #ff7eb3; margin-right: 4px; }
-.is-active .at-mark { color: white; }
+.at-mark {
+  color: #ff7eb3;
+  margin-right: 4px;
+}
+.is-active .at-mark {
+  color: white;
+}
 
 textarea {
   flex: 1;

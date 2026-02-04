@@ -210,13 +210,18 @@ const leaveRoom = () => {
   currentRoom.value = null
 }
 
-/**
- * 返信の準備：入力欄にメンションを追加
- * @param {string} userName 対象のユーザー名
- */
 const prepareReply = (userName) => {
-  replyTarget.value = `@${userName} `
+  const mention = `@${userName} `
+
+  // 今入力されている文字の中にすでにその人がいるなら何もしない
+  if (replyTarget.value.includes(mention)) {
+    return
+  }
+
+  // メンションを今のターゲットの「先頭」に追加
+  replyTarget.value = mention + replyTarget.value
 }
+
 /** 返信状態の解除 */
 const clearReply = () => {
   replyTarget.value = ''
