@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 const emit = defineEmits(['send', 'typing'])
 const newMessage = ref('')
 const pendingImage = ref(null)
+const fileInput = ref(null)
 
 // --- 「入力中...」のロジック ---
 let typingTimeout = null
@@ -23,6 +24,26 @@ watch(newMessage, (val) => {
     emit('typing', false)
   }
 })
+// --- 共通のアップロード処理 ---
+const processUpload = async (file) => {
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) return alert('3MB以下にしてください')
+
+  // ファイル名をランダム生成
+  const fileName = `${Math.random()}.${file.name.split('.').pop()}`
+  const { data, error } = await supabase.storage
+    .from('chat-attachments')
+    .upload(`chat-images/${fileName}`, file)
+
+  if (error) return alert('アップ失敗：' + error.message)
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('chat-attachments')
+    .getPublicUrl(`chat-images/${fileName}`)
+
+  // プレビューに入れる
+  pendingImage.value = publicUrl
+}
 
 const handleSend = () => {
   // 画像もテキストも空なら何もしない
@@ -93,28 +114,49 @@ const clearImage = async () => {
   // 2. プレビューを消す
   pendingImage.value = null
 }
+
+// --- スマホ等のファイル選択時の処理 ---
+const handleFileChange = async (event) => {
+  const file = event.target.files[0] // ← event.target.target になってたのを修正
+  if (file) {
+    await processUpload(file)
+  }
+  event.target.value = '' // 同じファイルを連続で選べるようにリセット
+}
 </script>
 
 <template>
   <div class="input-container">
     <div v-if="pendingImage" class="image-preview">
       <img :src="pendingImage" />
-      <button @click="clearImage" class="clear-btn">
-        ×
-      </button>
+      <button @click="clearImage" class="clear-btn">×</button>
     </div>
 
     <div class="input-area">
+      <input 
+        type="file" 
+        ref="fileInput" 
+        accept="image/*" 
+        style="display: none" 
+        @change="handleFileChange"
+      />
+      
+      <button @click="fileInput.click()" class="file-btn">
+        📷
+      </button>
+
       <textarea
         v-model="newMessage"
         @keydown.enter.exact.prevent="handleSend"
         maxlength="1000"
-        placeholder="メッセージを入力（1000文字まで）..."
+        placeholder="メッセージを入力..."
         @paste="handlePaste"
       ></textarea>
+      
       <button
         @click="handleSend"
         :disabled="!newMessage.trim() && !pendingImage"
+        class="send-btn"
       >
         送信
       </button>
@@ -194,5 +236,14 @@ button {
 button:active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+.file-btn {
+  background: #444;
+  width: 50px;
+  height: 45px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

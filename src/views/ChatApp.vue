@@ -369,11 +369,12 @@ const toggleNotification = async () => {
 .chat-app {
   width: 95%;
   max-width: 800px;
-  height: 90vh;
+  height: 90dvh;
   background: var(--bg-card);
   border-radius: 24px;
   display: flex;
   flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   border: 1px solid #333;
   overflow: hidden;
