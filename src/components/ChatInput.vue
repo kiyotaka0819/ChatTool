@@ -123,6 +123,11 @@ const clearImage = async () => {
 </template>
 
 <style scoped>
+input, 
+textarea, 
+select {
+  font-size: 16px !important;
+}
 .input-container {
   display: flex;
   flex-direction: column;

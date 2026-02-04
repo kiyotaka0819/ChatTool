@@ -388,7 +388,10 @@ header {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #333;
-  color: var(--text-main); /* ★文字を白く */
+  color: var(--text-main);
+  position: relative;
+  z-index: 10; /* チャットウィンドウより手前に出す */
+  background: #1e1e1e; /* 透過させずにしっかり背景を塗る */
 }
 
 .user-info span {

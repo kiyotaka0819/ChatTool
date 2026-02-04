@@ -33,6 +33,11 @@ const handleConfirm = () => {
 </template>
 
 <style scoped>
+input, 
+textarea, 
+select {
+  font-size: 16px !important;
+}
 .modal-overlay {
   position: fixed;
   top: 0;

@@ -113,6 +113,11 @@ const renderText = (content) => {
 </template>
 
 <style scoped>
+input, 
+textarea, 
+select {
+  font-size: 16px !important;
+}
 .msg-row {
   display: flex;
   width: 100%;
