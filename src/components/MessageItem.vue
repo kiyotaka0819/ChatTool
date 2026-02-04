@@ -170,6 +170,10 @@ const groupedReactions = computed(() => {
     @click="activeEmoji = null"
   >
     <div class="bubble">
+      <div class="meta">
+        <strong>{{ msg.user_name }}</strong>
+        <small>{{ formatTime(msg.created_at) }}</small>
+      </div>
       <div v-if="!isEditing">
         <p
           v-if="renderContent(msg.content)"
