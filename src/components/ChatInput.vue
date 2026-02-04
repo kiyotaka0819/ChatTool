@@ -38,14 +38,20 @@ watch(newMessage, (val) => {
   const words = val.split(/[\s\n]/)
   const lastWord = words[words.length - 1]
 
-  if (lastWord.startsWith('@')) {
+  // 半角@ または 全角＠ で始まるかチェック
+  if (
+    lastWord.startsWith('@') ||
+    lastWord.startsWith('＠')
+  ) {
+    // 1文字目（@ or ＠）を削って検索ワードにする
     const query = lastWord.slice(1).toLowerCase()
     // 全ユーザーから部分一致で抽出（自分は除外しても良い）
     filteredUsers.value = props.allUsers.filter((u) =>
       u.toLowerCase().includes(query)
     )
     showSuggest.value = filteredUsers.value.length > 0
-    selectedIndex.value = 0 // リストが変わるたびに選択をトップに戻す
+    // リストが変わるたびに選択をトップに戻す
+    selectedIndex.value = 0
   } else {
     showSuggest.value = false
   }
@@ -54,7 +60,8 @@ watch(newMessage, (val) => {
 // ユーザー選択確定時の処理
 const selectUser = (name) => {
   const words = newMessage.value.split(/[\s\n]/)
-  words[words.length - 1] = `@${name} ` // 入力中の@キーワードを確定名に置換
+  // 最後の単語が @か＠ で始まってたら、それを半角メンションに置換
+  words[words.length - 1] = `@${name} `
   newMessage.value = words.join(' ')
   showSuggest.value = false
 }
