@@ -2,10 +2,17 @@
 import { ref, watch } from 'vue'
 import { supabase } from '../lib/supabaseClient'
 
-const emit = defineEmits(['send', 'typing'])
+const emit = defineEmits([
+  'send',
+  'typing',
+  'replyProcessed'
+])
 const newMessage = ref('')
 const pendingImage = ref(null)
 const fileInput = ref(null)
+const props = defineProps(['replyTarget', 'allUsers'])
+const showSuggest = ref(false)
+const filteredUsers = ref([])
 
 // --- 「入力中...」のロジック ---
 let typingTimeout = null
@@ -24,10 +31,52 @@ watch(newMessage, (val) => {
     emit('typing', false)
   }
 })
+
+watch(newMessage, (val) => {
+  const lastChar = val.slice(-1)
+  const words = val.split(/[\s\n]/)
+  const lastWord = words[words.length - 1]
+
+  if (lastWord.startsWith('@')) {
+    const query = lastWord.slice(1).toLowerCase()
+    // ルーム内のユーザーから絞り込み
+    filteredUsers.value = props.allUsers.filter((u) =>
+      u.toLowerCase().includes(query)
+    )
+    showSuggest.value = filteredUsers.value.length > 0
+  } else {
+    showSuggest.value = false
+  }
+})
+
+const selectUser = (name) => {
+  const words = newMessage.value.split(/[\s\n]/)
+  words[words.length - 1] = `@${name} ` // 最後の一語を置き換え
+  newMessage.value = words.join(' ')
+  showSuggest.value = false
+}
+
+// watchで「返信予約」が飛んできたら入力欄にセット
+watch(
+  () => props.replyTarget,
+  (newVal) => {
+    if (newVal) {
+      newMessage.value = newVal + newMessage.value
+      // セットしたことを親に伝えてクリアしてもらう（ループ防止）
+      emit('replyProcessed')
+
+      // ついでにtextareaにフォーカスを当てて、スマホのキーボードを出す
+      const textarea = document.querySelector('textarea')
+      textarea?.focus()
+    }
+  }
+)
+
 // --- 共通のアップロード処理 ---
 const processUpload = async (file) => {
   if (!file) return
-  if (file.size > 2 * 1024 * 1024) return alert('3MB以下にしてください')
+  if (file.size > 2 * 1024 * 1024)
+    return alert('3MB以下にしてください')
 
   // ファイル名をランダム生成
   const fileName = `${Math.random()}.${file.name.split('.').pop()}`
@@ -37,7 +86,9 @@ const processUpload = async (file) => {
 
   if (error) return alert('アップ失敗：' + error.message)
 
-  const { data: { publicUrl } } = supabase.storage
+  const {
+    data: { publicUrl }
+  } = supabase.storage
     .from('chat-attachments')
     .getPublicUrl(`chat-images/${fileName}`)
 
@@ -129,21 +180,34 @@ const handleFileChange = async (event) => {
   <div class="input-container">
     <div v-if="pendingImage" class="image-preview">
       <img :src="pendingImage" />
-      <button @click="clearImage" class="clear-btn">×</button>
+      <button @click="clearImage" class="clear-btn">
+        ×
+      </button>
     </div>
 
     <div class="input-area">
-      <input 
-        type="file" 
-        ref="fileInput" 
-        accept="image/*" 
-        style="display: none" 
+      <input
+        type="file"
+        ref="fileInput"
+        accept="image/*"
+        style="display: none"
         @change="handleFileChange"
       />
-      
+
       <button @click="fileInput.click()" class="file-btn">
         📷
       </button>
+
+      <div v-if="showSuggest" class="mention-suggest">
+        <div
+          v-for="user in filteredUsers"
+          :key="user"
+          @click="selectUser(user)"
+          class="suggest-item"
+        >
+          @{{ user }}
+        </div>
+      </div>
 
       <textarea
         v-model="newMessage"
@@ -152,7 +216,7 @@ const handleFileChange = async (event) => {
         placeholder="メッセージを入力..."
         @paste="handlePaste"
       ></textarea>
-      
+
       <button
         @click="handleSend"
         :disabled="!newMessage.trim() && !pendingImage"
@@ -165,8 +229,8 @@ const handleFileChange = async (event) => {
 </template>
 
 <style scoped>
-input, 
-textarea, 
+input,
+textarea,
 select {
   font-size: 16px !important;
 }
@@ -199,6 +263,7 @@ select {
   cursor: pointer;
 }
 .input-area {
+  position: relative;
   padding: 20px;
   background: #252525;
   border-top: 1px solid #333;

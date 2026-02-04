@@ -1,11 +1,12 @@
 <script setup>
 import { ref } from 'vue'
 
-const props = defineProps(['msg', 'currentUserName'])
+const props = defineProps(['msg', 'currentUserName', 'allUsers'])
 const emit = defineEmits([
   'delete',
   'update',
-  'image-loaded'
+  'image-loaded',
+  'reply'
 ])
 
 const isEditing = ref(false)
@@ -50,6 +51,25 @@ const renderText = (content) => {
   // URL部分を空文字に置換して、残ったテキストをトリミング
   return content.replace(urlRegex, '').trim()
 }
+
+const renderContent = (content) => {
+  if (!content) return ''
+  const urlRegex = /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+  let text = content.replace(urlRegex, '').trim()
+
+  const mentionRegex = /(@[^@\s\n]+)/g
+  
+  return text.replace(mentionRegex, (match) => {
+    const userName = match.slice(1) // @を取る
+    // その名前がルーム内に実在するかチェック
+    if (props.allUsers.includes(userName)) {
+      return `<span class="mention-tag">${match}</span>`
+    }
+    // いなければ、ただのテキストとして返す
+    return match 
+  })
+}
+
 </script>
 
 <template>
@@ -84,9 +104,9 @@ const renderText = (content) => {
       </div>
 
       <div v-else>
-        <p v-if="renderText(msg.content)" class="text">
-          {{ renderText(msg.content) }}
-        </p>
+
+
+        <p v-if="renderContent(msg.content)" class="text" v-html="renderContent(msg.content)"></p>
 
         <div
           v-for="url in extractImages(msg.content)"
@@ -99,22 +119,25 @@ const renderText = (content) => {
           />
         </div>
       </div>
-      <div
-        v-if="
-          msg.user_name === currentUserName && !isEditing
-        "
-        class="actions"
-      >
-        <span @click="isEditing = true">編集</span>
-        <span @click="$emit('delete', msg)">削除</span>
+      <div class="actions">
+        <template v-if="msg.user_name === currentUserName">
+          <span @click="isEditing = true">編集</span>
+          <span @click="$emit('delete', msg)">削除</span>
+        </template>
+
+        <template v-else>
+          <span @click="$emit('reply', msg.user_name)"
+            >返信</span
+          >
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-input, 
-textarea, 
+input,
+textarea,
 select {
   font-size: 16px !important;
 }
@@ -202,5 +225,35 @@ select {
   background: #2a2a2a; /* 読み込み中だとわかるように背景色を付ける */
   max-width: 100%;
   border-radius: 8px;
+}
+
+:deep(.mention-tag) {
+  color: #ffeb3b; /* 鮮やかな黄色 */
+  font-weight: bold;
+  background: rgba(255, 235, 59, 0.2);
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-shadow: 0 0 5px rgba(255, 235, 59, 0.5);
+}
+
+.mention-suggest {
+  position: absolute;
+  bottom: 100%; /* 入力欄の真上 */
+  left: 20px;
+  background: #333;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  z-index: 100;
+}
+.suggest-item {
+  padding: 8px 15px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.suggest-item:hover {
+  background: var(--accent);
+  color: white;
 }
 </style>

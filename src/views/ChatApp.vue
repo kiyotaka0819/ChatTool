@@ -22,6 +22,8 @@ const currentRoom = ref(null)
 const chatEndRef = ref(null)
 const isAllLoaded = ref(false)
 const isFetchingOlder = ref(false)
+const replyTarget = ref('')
+const allRoomUsers = ref([])
 const isNotificationEnabled = ref(
   localStorage.getItem('chat-notify') === 'true'
 )
@@ -33,12 +35,18 @@ onMounted(() => {
 })
 
 // ルーム決定後の処理
-const handleRoomSelect = (room) => {
+// ルーム決定後の処理をアップデート
+const handleRoomSelect = async (room) => {
   currentRoom.value = room
   isRoomSelected.value = true
+
+  // 1. まずユーザーリストを取得（メンション用）
+  await fetchAllRoomUsers()
+  // 2. メッセージ取得とリアルタイム設定
   fetchMessages()
   setupRealtime()
 }
+
 const isImage = (text) => {
   if (!text || typeof text !== 'string') return false
   return (
@@ -113,6 +121,25 @@ const handleTyping = async (isTyping) => {
   }
 }
 
+// ルーム内のユニークなユーザー名を取得する関数
+const fetchAllRoomUsers = async () => {
+  if (!currentRoom.value) return
+
+  // messagesテーブルから、そのroom_idのuser_nameだけを取得（重複OK）
+  const { data, error } = await supabase
+    .from('messages')
+    .select('user_name')
+    .eq('room_id', currentRoom.value.id)
+
+  if (!error && data) {
+    // Setを使って重複を排除して配列に戻す
+    const uniqueNames = [
+      ...new Set(data.map((m) => m.user_name))
+    ]
+    allRoomUsers.value = uniqueNames
+  }
+}
+
 // --- メッセージ取得・送信などの残りのロジックは以前と同じ（中略なし） ---
 const fetchMessages = async (isMore = false) => {
   if (
@@ -152,13 +179,20 @@ const fetchMessages = async (isMore = false) => {
 }
 
 const sendMessage = async (content) => {
-  await supabase.from('messages').insert([
+  const { error } = await supabase.from('messages').insert([
     {
       content,
       user_name: currentUserName.value,
       room_id: currentRoom.value.id
     }
   ])
+
+  if (
+    !error &&
+    !allRoomUsers.value.includes(currentUserName.value)
+  ) {
+    allRoomUsers.value.push(currentUserName.value)
+  }
 }
 
 const scrollToBottom = (instant = false) => {
@@ -231,9 +265,11 @@ const updateMessage = async (id, newContent) => {
   }
 
   // 2. 文字数チェック
-  const MAX_CHARS = 1000 
+  const MAX_CHARS = 1000
   if (newContent.length > MAX_CHARS) {
-    alert(`${MAX_CHARS}文字以内にしてください。（今は${newContent.length}文字）`)
+    alert(
+      `${MAX_CHARS}文字以内にしてください。（今は${newContent.length}文字）`
+    )
     return
   }
 
@@ -287,6 +323,15 @@ onBeforeUnmount(() => {
     supabase.removeChannel(roomChannel)
   }
 })
+// リプライ実施用関数
+const prepareReply = (userName) => {
+  replyTarget.value = `@${userName} `
+}
+
+// 送信が終わったらクリアするための関数（ChatInputから呼ばれる想定）
+const clearReply = () => {
+  replyTarget.value = ''
+}
 </script>
 
 <template>
@@ -341,11 +386,15 @@ onBeforeUnmount(() => {
         </div>
         <div v-for="msg in messages" :key="msg.id">
           <MessageItem
+            v-for="msg in messages"
+            :key="msg.id"
             :msg="msg"
             :currentUserName="currentUserName"
+            :allUsers="allRoomUsers"
             @delete="deleteMessage"
             @update="updateMessage"
             @image-loaded="scrollToBottom"
+            @reply="prepareReply"
           />
         </div>
         <div ref="chatEndRef"></div>
@@ -353,6 +402,9 @@ onBeforeUnmount(() => {
       <ChatInput
         @send="sendMessage"
         @typing="handleTyping"
+        :replyTarget="replyTarget"
+        :allUsers="allRoomUsers"
+        @replyProcessed="clearReply"
       />
     </div>
   </div>
@@ -475,8 +527,31 @@ header {
 }
 
 .leave-btn:hover {
-  background: rgba(255, 59, 48, 0.2); /* ほんのり赤く */
+  background: rgba(255, 59, 48, 0.2);
   color: #ff3b30;
   border-color: #ff3b30;
+}
+
+.reply-btn {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: 10px;
+  border-radius: 4px;
+}
+
+.reply-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ff7eb3;
+}
+
+@media screen and (max-width: 480px) {
+  .reply-btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
 }
 </style>
