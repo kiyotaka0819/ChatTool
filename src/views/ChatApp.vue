@@ -251,6 +251,10 @@ const updateMessage = async (id, newContent) => {
 
 const leaveRoom = () => {
   if (!confirm('ルームから退出しますか？')) return
+  if (roomChannel) {
+    supabase.removeChannel(roomChannel)
+    roomChannel = null
+  }
   isRoomSelected.value = false
   currentRoom.value = null
   messages.value = []
@@ -277,6 +281,12 @@ const toggleNotification = async () => {
     isNotificationEnabled.value
   )
 }
+// ブラウザ遷移時にチャネルを閉じる
+onBeforeUnmount(() => {
+  if (roomChannel) {
+    supabase.removeChannel(roomChannel)
+  }
+})
 </script>
 
 <template>
