@@ -52,6 +52,8 @@ const activeEmoji = ref(null)
 const vFocus = {
   mounted: (el) => el.focus()
 }
+// 画像が折りたたまれているかどうかの状態
+const isCollapsed = ref(true)
 // --- 表示用データ（Computed Properties） ---
 
 /**
@@ -61,6 +63,10 @@ const vFocus = {
 const imageUrls = computed(() =>
   extractImages(props.msg.content)
 )
+// 画像をトグル管理するための関数
+const toggleImage = () => {
+  isCollapsed.value = !isCollapsed.value
+}
 
 /**
  * メンションのハイライトやURL除去済みの整形済みHTML
@@ -215,12 +221,34 @@ const formattedUpdatedTime = computed(() => {
           v-html="formattedHtml"
         ></p>
 
-        <div v-for="url in imageUrls" :key="url">
+        <div
+          v-for="url in imageUrls"
+          :key="url"
+          class="chat-image-container"
+        >
           <img
             :src="url"
-            class="chat-image"
+            :class="[
+              'chat-image',
+              { collapsed: isCollapsed }
+            ]"
+            @click="toggleImage"
             @load="$emit('image-loaded')"
           />
+          <div
+            v-if="isCollapsed"
+            class="zoom-hint"
+            @click="toggleImage"
+          >
+            <span>🔍拡大</span>
+          </div>
+          <div
+            v-else
+            class="zoom-hint"
+            @click="toggleImage"
+          >
+            <span>👆縮小</span>
+          </div>
         </div>
       </div>
 
@@ -666,5 +694,48 @@ select {
   margin-left: 6px;
   font-style: italic;
   margin-right: auto;
+}
+.chat-image-container {
+  position: relative;
+  cursor: pointer;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.chat-image {
+  display: block;
+  max-width: 100%;
+  max-height: 800px;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #2a2a2a;
+}
+.chat-image.collapsed {
+  max-height: 70px;
+  object-fit: cover;
+  object-position: top;
+  mask-image: linear-gradient(
+    to bottom,
+    black 70%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 70%,
+    transparent 100%
+  );
+}
+
+.zoom-hint {
+  font-size: 0.65rem;
+  color: #ff7eb3;
+  text-align: right;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 0 0 12px 12px;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  pointer-events: none;
 }
 </style>
