@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, nextTick } from 'vue'
 import { supabase } from '../lib/supabaseClient'
+import WhiteBoardModal from '../components/WhiteBoardModal.vue'
 
 // --- Props & Emits ---
 const props = defineProps(['replyTarget', 'allUsers'])
@@ -11,13 +12,20 @@ const emit = defineEmits([
 ])
 
 // --- 状態管理 ---
-const newMessage = ref('') // 入力中のテキスト
-const pendingImage = ref(null) // 送信待機中の画像URL
-const fileInput = ref(null) // ファイル入力要素の参照
-const showSuggest = ref(false) // サジェストの表示フラグ
-const filteredUsers = ref([]) // 絞り込まれたユーザーリスト
-const selectedIndex = ref(0) // サジェスト選択中のインデックス
-
+// 入力中のテキスト
+const newMessage = ref('')
+// 送信待機中の画像URL
+const pendingImage = ref(null)
+// ファイル入力要素の参照
+const fileInput = ref(null)
+// サジェストの表示フラグ
+const showSuggest = ref(false)
+// 絞り込まれたユーザーリスト
+const filteredUsers = ref([])
+// サジェスト選択中のインデックス
+const selectedIndex = ref(0)
+// ホワイトボードのオンオフ
+const isShowWhiteboard = ref(false)
 // --- 「入力中...」通知ロジック ---
 let typingTimeout = null
 watch(newMessage, (val) => {
@@ -178,6 +186,37 @@ const handleFileChange = async (event) => {
   if (file) await processUpload(file)
   event.target.value = ''
 }
+
+/**
+ * ホワイトボードから受け取った画像を送信
+ */
+const sendWhiteboardImage = async (blob) => {
+  const fileName = `draw_${Date.now()}.png`
+  const filePath = `chat-images/${fileName}`
+
+  // 1. Storage にアップロード
+  const { data, error } = await supabase.storage
+    .from('chat-attachments')
+    .upload(filePath, blob, { contentType: 'image/png' })
+
+  if (error) {
+    alert('アップロード失敗：' + error.message)
+    return
+  }
+
+  // 2. 公開URLを取得
+  const {
+    data: { publicUrl }
+  } = supabase.storage
+    .from('chat-attachments')
+    .getPublicUrl(filePath)
+
+  // 3. 親（ChatApp）に送信を依頼！
+  emit('send', publicUrl)
+
+  // モーダルを閉じる
+  isShowWhiteboard.value = false
+}
 </script>
 
 <template>
@@ -201,7 +240,12 @@ const handleFileChange = async (event) => {
       <button @click="fileInput.click()" class="file-btn">
         📷
       </button>
-
+      <button
+        @click="isShowWhiteboard = true"
+        class="wb-open-btn"
+      >
+        🎨
+      </button>
       <div v-if="showSuggest" class="mention-dropdown">
         <div
           v-for="(user, index) in filteredUsers"
@@ -237,6 +281,11 @@ Shift + Enterで改行"
         送信
       </button>
     </div>
+    <WhiteBoardModal
+      v-if="isShowWhiteboard"
+      @close="isShowWhiteboard = false"
+      @send="sendWhiteboardImage"
+    />
   </div>
 </template>
 
@@ -347,7 +396,8 @@ button.send-btn:disabled {
   cursor: not-allowed;
 }
 
-.file-btn {
+.file-btn,
+.wb-open-btn {
   background: #444;
   width: 50px;
   height: 45px;

@@ -38,6 +38,7 @@ const replyTarget = ref('')
 // 名前変更モーダルを出すか
 const isChangingRoomName = ref(false)
 
+
 // --- 通知設定 ---
 /** @type {import('vue').Ref<boolean>} ブラウザ通知が有効かどうか */
 const isNotificationEnabled = ref(
@@ -395,7 +396,6 @@ const updateRoomName = async () => {
 
         <div ref="chatEndRef"></div>
       </div>
-
       <ChatInput
         @send="sendMessage"
         @typing="handleTyping"
