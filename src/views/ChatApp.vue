@@ -22,9 +22,21 @@ import RoomNameModal from '../components/RoomNameModal.vue'
 
 // --- ユーザー状態管理 ---
 // ユーザー名（ローカルストレージと同期）
+// localStorageのキー名を統一して、確実に取得する
+const STORAGE_KEY = 'chat-user-name'
+
 const currentUserName = ref(
-  localStorage.getItem('chat-user-name') || ''
+  localStorage.getItem(STORAGE_KEY) || ''
 )
+
+// モーダルで確定した時に「確実に」保存する
+const handleNameSet = () => {
+  if (currentUserName.value.trim()) {
+    localStorage.setItem(STORAGE_KEY, currentUserName.value)
+    isNameSet.value = true
+  }
+}
+
 // 名前入力が完了したか
 const isNameSet = ref(false)
 // ルーム選択が完了したか
@@ -221,14 +233,33 @@ const scrollToBottom = (instant = false) => {
  * ブラウザ通知の送信
  * @param {Object} p Supabaseのペイロード
  */
-const sendBrowserNotification = (p) => {
+const sendBrowserNotification = async (p) => {
   if (
     isNotificationEnabled.value &&
     Notification.permission === 'granted'
   ) {
-    new Notification(`${p.new.user_name} さん`, {
-      body: p.new.content
-    })
+    // 1. Service Workerが準備できているか確認
+    const registration = await navigator.serviceWorker.ready
+
+    if (registration) {
+      // 2. Service Worker経由で通知を表示
+      // これならアプリがバックグラウンドにいてもOSが通知を肩代わりしてくれる
+      registration.showNotification(
+        `${p.new.user_name} さん`,
+        {
+          body: p.new.content,
+          icon: '/ChatTool/icon-192.png', // アイコンも指定
+          badge: '/ChatTool/icon-192.png', // 通知バーに出るアイコン
+          tag: 'new-message', // 同じタグなら通知が重ならず上書きされる
+          renotify: true
+        }
+      )
+    } else {
+      // フォールバック（Service Workerがない場合）
+      new Notification(`${p.new.user_name} さん`, {
+        body: p.new.content
+      })
+    }
   }
 }
 
@@ -336,7 +367,7 @@ onMounted(() => {
     <NameModal
       v-if="!isNameSet"
       v-model="currentUserName"
-      @confirm="isNameSet = true"
+      @confirm="handleNameSet"
     />
     <RoomSelector
       v-else-if="!isRoomSelected"
