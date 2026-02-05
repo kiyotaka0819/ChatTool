@@ -48,7 +48,10 @@ const editContent = ref(props.msg.content)
 
 /** @type {import('vue').Ref<string|null>} 現在リアクションしたユーザーリストを表示している絵文字 */
 const activeEmoji = ref(null)
-
+// 編集ボタン押下時にフォーカスする
+const vFocus = {
+  mounted: (el) => el.focus()
+}
 // --- 表示用データ（Computed Properties） ---
 
 /**
@@ -155,6 +158,27 @@ const addReaction = async (emoji) => {
   // 完了後にメニューを閉じる
   showEmojiMenu.value = false
 }
+
+/**
+ * メッセージが編集されたかどうか
+ */
+const isEdited = computed(() => {
+  // boolean フラグを見る
+  return props.msg.is_edited === true
+})
+/**
+ * 編集時刻（HH:mm形式）
+ */
+const formattedUpdatedTime = computed(() => {
+  if (!props.msg.updated_at) return ''
+  return new Date(props.msg.updated_at).toLocaleTimeString(
+    'ja-JP',
+    {
+      hour: '2-digit',
+      minute: '2-digit'
+    }
+  )
+})
 </script>
 
 <template>
@@ -165,10 +189,23 @@ const addReaction = async (emoji) => {
     ]"
     @click="activeEmoji = null"
   >
-    <div class="bubble">
+    <div
+      :class="[
+        'bubble',
+        { 'is-editing-active': isEditing }
+      ]"
+    >
       <div class="meta">
         <strong>{{ msg.user_name }}</strong>
         <small>{{ formattedTime }}</small>
+
+        <span
+          v-if="isEdited"
+          class="edited-label"
+          :title="'編集時刻: ' + formattedUpdatedTime"
+        >
+          （編集済み: {{ formattedUpdatedTime }}）
+        </span>
       </div>
 
       <div v-if="!isEditing">
@@ -187,20 +224,28 @@ const addReaction = async (emoji) => {
         </div>
       </div>
 
-      <div v-else>
+      <div v-else class="edit-mode-container">
         <textarea
           v-model="editContent"
           class="edit-area"
+          placeholder="メッセージを編集..."
+          v-focus
+          @keydown.enter.exact.prevent="handleUpdate"
+          @keydown.esc="isEditing = false"
         ></textarea>
-        <div class="edit-actions">
-          <button @click="handleUpdate" class="mini-save">
-            保存
+        <div class="edit-actions-row">
+          <div class="keyHint">Shift + Enter で改行</div>
+          <button
+            @click="handleUpdate"
+            class="edit-btn save"
+          >
+            <span>✅</span> 保存
           </button>
           <button
             @click="isEditing = false"
-            class="mini-cancel"
+            class="edit-btn cancel"
           >
-            キャンセル
+            <span>❌</span> 取消
           </button>
         </div>
       </div>
@@ -234,16 +279,33 @@ const addReaction = async (emoji) => {
         <span
           @click.stop="showEmojiMenu = !showEmojiMenu"
           class="action-btn"
-          >＋☺</span
+          title="リアクション"
         >
+          ☺+
+        </span>
+
         <template v-if="msg.user_name === currentUserName">
-          <span @click="isEditing = true">編集</span>
-          <span @click="$emit('delete', msg)">削除</span>
-        </template>
-        <template v-else>
-          <span @click="$emit('reply', msg.user_name)"
-            >返信</span
+          <span
+            @click="isEditing = true"
+            class="action-btn edit-btn"
           >
+            ✏️ 編集
+          </span>
+          <span
+            @click="$emit('delete', msg)"
+            class="action-btn delete-btn"
+          >
+            🗑️ 削除
+          </span>
+        </template>
+
+        <template v-else>
+          <span
+            @click="$emit('reply', msg.user_name)"
+            class="action-btn reply-btn"
+          >
+            💬 返信
+          </span>
         </template>
       </div>
 
@@ -266,130 +328,150 @@ const addReaction = async (emoji) => {
 </template>
 
 <style scoped>
+/* モバイルでのズーム防止 */
 input,
 textarea,
 select {
   font-size: 16px !important;
 }
+
+/* メッセージ行の基本配置 */
 .msg-row {
   display: flex;
   width: 100%;
-  margin-bottom: 15px;
+  margin-bottom: 20px; /* 少し広げてツールチップのスペース確保 */
+  position: relative;
 }
+
 .msg-row.is-mine {
   justify-content: flex-end;
 }
+
+/* 吹き出し本体 */
 .bubble {
   max-width: 75%;
   padding: 12px 18px;
   border-radius: 18px;
   background: #333;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  position: relative;
+  position: relative; /* actionsの基準点 */
 }
+
 .is-mine .bubble {
   background: linear-gradient(135deg, #007aff, #0056b3);
   color: white;
   border-bottom-right-radius: 4px;
 }
+
 .msg-row:not(.is-mine) .bubble {
   border-bottom-left-radius: 4px;
 }
+
+/* メッセージテキスト */
 .text {
   white-space: pre-wrap;
   word-break: break-all;
   margin: 5px 0;
   line-height: 1.5;
 }
+
+/* 送信者名・時間 */
 .meta {
   font-size: 0.7rem;
   opacity: 0.6;
   margin-bottom: 4px;
 }
+
+/* --- 操作ボタン(編集・削除・返信) --- */
 .actions {
-  font-size: 0.7rem;
-  margin-top: 8px;
+  position: absolute;
+  top: -15px;
   display: flex;
-  gap: 10px;
+  gap: 6px;
   opacity: 0;
-  transition: 0.2s;
+  transition: all 0.2s ease-in-out;
+  z-index: 10;
+  pointer-events: none;
 }
+
+/* 自分の時は右、相手の時は左に浮かせる */
+.is-mine .actions {
+  right: 10px;
+}
+.msg-row:not(.is-mine) .actions {
+  left: 10px;
+}
+
+/* ホバーでふわっと浮かび上がる */
 .bubble:hover .actions {
   opacity: 1;
+  top: -25px;
+  pointer-events: auto;
 }
-.actions span {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 3px 10px;
-  border-radius: 8px;
+
+/* ボタンの共通パーツ */
+.action-btn {
+  background: #2a2a2a;
+  color: #ccc;
+  border: 1px solid #444;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: bold;
   cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
+.action-btn:hover {
+  background: #3a3a3a;
+  color: white;
+  transform: translateY(-2px);
+  border-color: #ff7eb3;
+}
+
+.delete-btn:hover {
+  border-color: #ff4d4f;
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+}
+
+.edit-btn:hover {
+  border-color: #52c41a;
+  color: #52c41a;
+}
+
+/* --- 編集モード --- */
 .edit-area {
   width: 100%;
+  min-height: 60px;
   background: #444;
   color: white;
-  border: none;
+  border: 1px solid #555;
   border-radius: 8px;
-  padding: 5px;
+  padding: 8px;
+  margin-bottom: 5px;
 }
+
 .edit-actions {
   display: flex;
-  gap: 5px;
-  margin-top: 5px;
-}
-.mini-save {
-  background: #52c41a;
-  color: white;
-  font-size: 0.7rem;
-  padding: 3px 10px;
-}
-.mini-cancel {
-  background: #666;
-  color: white;
-  font-size: 0.7rem;
-  padding: 3px 10px;
-}
-.chat-image {
-  display: block;
-  min-width: 50px; /* 読み込み前でも場所を確保 */
-  min-height: 50px;
-  background: #2a2a2a; /* 読み込み中だとわかるように背景色を付ける */
-  max-width: 100%;
-  border-radius: 8px;
+  gap: 8px;
 }
 
-:deep(.mention-tag) {
-  color: #ffeb3b; /* 鮮やかな黄色 */
-  font-weight: bold;
-  background: rgba(255, 235, 59, 0.2);
-  padding: 2px 4px;
-  border-radius: 4px;
-  text-shadow: 0 0 5px rgba(255, 235, 59, 0.5);
+/* --- リアクション表示 --- */
+.reactions-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.mention-suggest {
-  position: absolute;
-  bottom: 100%; /* 入力欄の真上 */
-  left: 20px;
-  background: #333;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  max-height: 150px;
-  overflow-y: auto;
-  z-index: 100;
-}
-.suggest-item {
-  padding: 8px 15px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-.suggest-item:hover {
-  background: var(--accent);
-  color: white;
-}
-.mini-emoji-picker {
-  cursor: pointer;
-}
 .reaction-badge {
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.05);
@@ -400,60 +482,29 @@ select {
   transition: 0.2s;
 }
 
-.reaction-badge:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: var(--accent);
-}
-.reaction-wrapper {
-  position: relative; /* ポップアップの基準点 */
-  display: inline-block;
-}
-
-.name-list-popup {
-  position: absolute;
-  bottom: 120%; /* バッジの上に表示 */
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  color: #fff;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 0.7rem;
-  white-space: nowrap; /* 改行させない */
-  z-index: 100;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--accent);
-}
-
-/* 吹き出しの三角部分 */
-.name-list-popup::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  margin-left: -5px;
-  border-width: 5px;
-  border-style: solid;
-  border-color: var(--accent) transparent transparent
-    transparent;
-}
-
 .reaction-badge.is-active {
-  background: rgba(
-    255,
-    235,
-    59,
-    0.2
-  ); /* ちょっと黄色っぽく浮かせる */
+  background: rgba(255, 235, 59, 0.1);
   border-color: #ffeb3b;
   color: #ffeb3b;
 }
 
+/* 絵文字ピッカー */
+.mini-emoji-picker {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  background: #2a2a2a;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #444;
+}
+
 .emoji-option {
-  padding: 5px;
+  font-size: 1.2rem;
+  padding: 4px;
   cursor: pointer;
-  border-radius: 4px;
-  border: 1px solid transparent; /* ガタつき防止 */
+  border-radius: 6px;
   transition: 0.2s;
 }
 
@@ -461,24 +512,152 @@ select {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* 自分が選択済みの絵文字スタイル */
-.emoji-option.is-selected {
-  background: rgba(255, 235, 59, 0.15);
-  border-color: #ffeb3b;
+/* --- その他装飾 --- */
+.chat-image {
+  display: block;
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  margin-top: 8px;
+  background: #2a2a2a;
+}
+
+:deep(.mention-tag) {
+  color: #ffeb3b;
+  font-weight: bold;
+  background: rgba(255, 235, 59, 0.1);
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 :deep(.chat-link) {
   color: #47fff3;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
   text-decoration: underline;
-  font-weight: bold;
   word-break: break-all;
-  transition: background 0.2s;
 }
 
-:deep(.chat-link:hover) {
-  background: rgba(255, 255, 255, 0.4);
+/* スマホやタブレット（ホバーが使えないデバイス）向けの調整 */
+@media (hover: none) {
+  .actions {
+    opacity: 1; /* 常に表示 */
+    pointer-events: auto; /* クリック可能に */
+    top: -20px; /* 位置を固定 */
+    background: rgba(
+      42,
+      42,
+      42,
+      0.9
+    ); /* 少し背景を濃くして視認性アップ */
+    border-radius: 12px;
+  }
+
+  /* スマホの時はボタンを少し大きくして押しやすくする */
+  .action-btn {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+}
+
+/* 編集モードのコンテナ */
+.edit-mode-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 96%;
+}
+
+/* 編集中の入力欄：吹き出しの背景に馴染ませる */
+.edit-area {
+  width: 100%;
+  min-height: 120px;
+  background: rgba(
+    255,
+    255,
+    255,
+    0.05
+  ); /* ほんのり明るく */
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.edit-area:focus {
+  border-color: #ff7eb3; /* 集中してる感じを出す */
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.edit-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* 編集用ボタンの共通スタイル */
+.edit-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.edit-btn.save {
+  background: #52c41a;
+  color: white;
+}
+
+.edit-btn.save:hover {
+  background: #73d13d;
+  transform: translateY(-1px);
+}
+
+.edit-btn.cancel {
+  background: #444;
+  color: #ccc;
+}
+
+.edit-btn.cancel:hover {
+  background: #555;
+  color: white;
+}
+
+/* 既存の style セクションに追加 */
+.edited-label {
+  font-size: 0.65rem;
+  opacity: 0.5;
+  margin-left: 6px;
+  font-style: italic;
+}
+
+.is-mine .edited-label {
+  color: #e0e0e0;
+  opacity: 0.7;
+}
+
+.bubble.is-editing-active {
+  max-width: 100%;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.keyHint {
+  font-size: 0.65rem;
+  opacity: 0.5;
+  margin-left: 6px;
+  font-style: italic;
+  margin-right: auto;
 }
 </style>

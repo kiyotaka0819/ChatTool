@@ -130,11 +130,28 @@ const deleteMessage = async (msg) => {
  * @param {string} newContent 更新後の本文
  */
 const updateMessage = async (id, newContent) => {
+  const now = new Date().toISOString()
+
   const { error } = await supabase
     .from('messages')
-    .update({ content: newContent })
+    .update({
+      content: newContent,
+      updated_at: now,
+      is_edited: true // 編集したという証拠を残す
+    })
     .eq('id', id)
-  if (error) alert('更新失敗')
+
+  if (error) {
+    alert('更新失敗')
+  } else {
+    // ローカルの状態も更新
+    const msg = messages.value.find((m) => m.id === id)
+    if (msg) {
+      msg.content = newContent
+      msg.updated_at = now
+      msg.is_edited = true // 子コンポーネントに伝える
+    }
+  }
 }
 
 // --- ユーティリティ・表示制御 ---

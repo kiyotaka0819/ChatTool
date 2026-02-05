@@ -221,7 +221,8 @@ const handleFileChange = async (event) => {
         @keydown="handleKeydown"
         @keydown.enter.exact.prevent="handleSend"
         maxlength="1000"
-        placeholder="メッセージを入力..."
+        placeholder="メッセージを入力...
+Shift + Enterで改行"
         @paste="handlePaste"
       ></textarea>
 
