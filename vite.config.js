@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import vue from '@vue/plugin-vue'
+import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
@@ -8,20 +8,21 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        "name": "chattool",
-        "short_name": "chat",
-        "start_url": "/",
-        "display": "standalone",
-        "background_color": "#1a1a1a",
-        "theme_color": "#007aff",
-        "icons": [
+        name: 'chattool',
+        short_name: 'chat',
+        start_url: '/ChatTool/',
+        display: 'standalone',
+        background_color: '#1a1a1a',
+        theme_color: '#007aff',
+        icons: [
           {
-            "src": "/icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png"
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png'
           }
         ]
       }
     })
-  ]
+  ],
+  base: '/ChatTool/'
 })
