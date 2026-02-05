@@ -138,33 +138,62 @@ const updateMessage = async (id, newContent) => {
 }
 
 // --- ユーティリティ・表示制御 ---
-
 /**
  * 画面を最下部までスクロールさせる
- * DOM更新とレンダリングの遅延を考慮した3段構えの実行
- * @param {boolean} [instant=false] アニメーションを無効にするか
  */
 const scrollToBottom = (instant = false) => {
   nextTick(() => {
-    const performScroll = () => {
-      // アンカー要素へのスクロールを試行
-      if (chatEndRef.value) {
-        chatEndRef.value.scrollIntoView({
-          behavior: instant ? 'auto' : 'smooth',
-          block: 'end'
-        })
+    const chatWindow =
+      document.querySelector('.chat-window')
+    if (!chatWindow) return
+
+    // 初回は追い打ちリトライのみで確実に飛ばす
+    if (instant) {
+      const forceBottom = () => {
+        chatWindow.scrollTop = chatWindow.scrollHeight
       }
-      // フォールバック：親要素の scrollTop を直接操作
-      const chatWindow =
-        document.querySelector('.chat-window')
-      if (chatWindow) {
+      forceBottom()
+      setTimeout(forceBottom, 50)
+      setTimeout(forceBottom, 300)
+      return
+    }
+
+    // --- 通常送信時の下に降りるアニメーション ---
+    const start = chatWindow.scrollTop
+    const duration = 800 // 好みの速度に変更
+    let startTime = null
+
+    const animation = (currentTime) => {
+      if (!startTime) startTime = currentTime
+      const timeElapsed = currentTime - startTime
+      const progress = Math.min(timeElapsed / duration, 1)
+
+      // イージング（Quad）
+      const easeInOutQuad =
+        progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2
+
+      // 今の最新の高さを取得して計算する
+      const currentMaxScroll =
+        chatWindow.scrollHeight - chatWindow.clientHeight
+      const currentDistance = currentMaxScroll - start
+
+      // 距離がマイナス（すでに下回ってる）なら終了
+      if (currentDistance <= 0) return
+
+      chatWindow.scrollTop =
+        start + currentDistance * easeInOutQuad
+
+      if (timeElapsed < duration) {
+        requestAnimationFrame(animation)
+      } else {
+        // 最後に合わせる
         chatWindow.scrollTop = chatWindow.scrollHeight
       }
     }
 
-    performScroll() // 直後
-    setTimeout(performScroll, 100) // 描画待ち1
-    setTimeout(performScroll, 300) // 描画待ち2（画像等）
+    requestAnimationFrame(animation)
   })
 }
 
