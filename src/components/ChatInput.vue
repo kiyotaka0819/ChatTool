@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { supabase } from '../lib/supabaseClient'
 
 // --- Props & Emits ---
@@ -97,12 +97,18 @@ const handleKeydown = (e) => {
 watch(
   () => props.replyTarget,
   (newVal) => {
-    if (newVal) {
-      newMessage.value = newVal
-      emit('replyProcessed')
+    if (!newVal) return
+
+    // 入力欄の中に、まだその名前が入ってない時だけ追加する
+    if (!newMessage.value.includes(newVal)) {
+      newMessage.value = newVal + newMessage.value
+    }
+    // 親の replyTarget をリセット
+    emit('replyProcessed')
+    nextTick(() => {
       const textarea = document.querySelector('textarea')
       textarea?.focus()
-    }
+    })
   }
 )
 

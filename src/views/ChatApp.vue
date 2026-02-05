@@ -211,15 +211,7 @@ const leaveRoom = () => {
 }
 
 const prepareReply = (userName) => {
-  const mention = `@${userName} `
-
-  // 今入力されている文字の中にすでにその人がいるなら何もしない
-  if (replyTarget.value.includes(mention)) {
-    return
-  }
-
-  // メンションを今のターゲットの「先頭」に追加
-  replyTarget.value = mention + replyTarget.value
+  replyTarget.value = `@${userName} `
 }
 
 /** 返信状態の解除 */
@@ -333,7 +325,7 @@ const loadMoreMessages = async () => {
         @typing="handleTyping"
         :replyTarget="replyTarget"
         :allUsers="allRoomUsers"
-        @replyProcessed="clearReply"
+        @replyProcessed="replyTarget = ''"
       />
     </div>
   </div>
