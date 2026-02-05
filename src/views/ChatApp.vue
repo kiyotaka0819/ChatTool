@@ -38,7 +38,6 @@ const replyTarget = ref('')
 // 名前変更モーダルを出すか
 const isChangingRoomName = ref(false)
 
-
 // --- 通知設定 ---
 /** @type {import('vue').Ref<boolean>} ブラウザ通知が有効かどうか */
 const isNotificationEnabled = ref(
@@ -312,6 +311,24 @@ const updateRoomName = async () => {
     isChangingRoomName.value = false
   }
 }
+
+// App.vue の <script setup> 内に追記
+const requestNotificationPermission = async () => {
+  if (!('Notification' in window)) {
+    console.log('このブラウザは通知に対応していません')
+    return
+  }
+
+  const permission = await Notification.requestPermission()
+  if (permission === 'granted') {
+    console.log('通知許可')
+  }
+}
+
+// 起動時に実行
+onMounted(() => {
+  requestNotificationPermission()
+})
 </script>
 
 <template>

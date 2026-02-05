@@ -225,6 +225,7 @@ const formattedUpdatedTime = computed(() => {
           v-for="url in imageUrls"
           :key="url"
           class="chat-image-container"
+          @click.stop="toggleImage"
         >
           <img
             :src="url"
@@ -232,22 +233,12 @@ const formattedUpdatedTime = computed(() => {
               'chat-image',
               { collapsed: isCollapsed }
             ]"
-            @click="toggleImage"
             @load="$emit('image-loaded')"
           />
-          <div
-            v-if="isCollapsed"
-            class="zoom-hint"
-            @click="toggleImage"
-          >
-            <span>🔍拡大</span>
-          </div>
-          <div
-            v-else
-            class="zoom-hint"
-            @click="toggleImage"
-          >
-            <span>👆縮小</span>
+          <div class="zoom-hint">
+            <span>{{
+              isCollapsed ? '🔍 拡大' : '👆 縮小'
+            }}</span>
           </div>
         </div>
       </div>
@@ -700,6 +691,8 @@ select {
   cursor: pointer;
   margin-top: 8px;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .chat-image {
   display: block;
