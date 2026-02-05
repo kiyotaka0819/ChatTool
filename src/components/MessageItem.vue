@@ -512,6 +512,13 @@ select {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.emoji-option.is-selected {
+  background: rgba(255, 235, 59, 0.2);
+  border: 1px solid #ffeb3b;
+  border-radius: 6px;
+  transform: scale(1.1);
+}
+
 /* --- その他装飾 --- */
 .chat-image {
   display: block;

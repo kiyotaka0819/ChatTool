@@ -13,6 +13,7 @@ import MessageItem from '../components/MessageItem.vue'
 import ChatInput from '../components/ChatInput.vue'
 import NameModal from '../components/NameModal.vue'
 import RoomSelector from '../components/RoomSelector.vue'
+import RoomNameModal from '../components/RoomNameModal.vue'
 
 /** * @typedef {Object} Room
  * @property {number} id - ルームID
@@ -34,6 +35,8 @@ const currentRoom = ref(null)
 const chatEndRef = ref(null)
 // 返信先のユーザー名（@マーク含む）
 const replyTarget = ref('')
+// 名前変更モーダルを出すか
+const isChangingRoomName = ref(false)
 
 // --- 通知設定 ---
 /** @type {import('vue').Ref<boolean>} ブラウザ通知が有効かどうか */
@@ -294,6 +297,20 @@ const loadMoreMessages = async () => {
       chatWindow.scrollHeight - previousScrollHeight
   }
 }
+
+const updateRoomName = async () => {
+  const { error } = await supabase
+    .from('rooms')
+    .update({ name: currentRoom.value.name })
+    .eq('id', currentRoom.value.id)
+
+  if (error) {
+    alert('更新失敗')
+  } else {
+    currentRoom.value = { ...currentRoom.value }
+    isChangingRoomName.value = false
+  }
+}
 </script>
 
 <template>
@@ -330,6 +347,19 @@ const loadMoreMessages = async () => {
                 ? '🔔 通知ON'
                 : '🔕 通知OFF'
             }}
+          </button>
+          <RoomNameModal
+            v-if="isChangingRoomName"
+            v-model="currentRoom.name"
+            @close="isChangingRoomName = false"
+            @confirm="updateRoomName"
+          />
+
+          <button
+            @click="isChangingRoomName = true"
+            class="update-room-name"
+          >
+            ルーム名変更
           </button>
         </div>
       </header>
@@ -434,7 +464,8 @@ header {
   margin-bottom: 5px;
 }
 .leave-btn,
-.notify-btn {
+.notify-btn,
+.update-room-name {
   margin-left: 10px;
   padding: 4px 12px;
   border-radius: 12px;
@@ -443,6 +474,15 @@ header {
   border: 1px solid #444;
   background: rgba(255, 255, 255, 0.1);
   color: #ccc;
+}
+
+.leave-btn:hover,
+.notify-btn:hover,
+.update-room-name:hover {
+  cursor: pointer;
+  border: 1px solid #4facfe;
+  background: rgba(255, 255, 255, 0.1);
+  color: #4facfe;
 }
 .notify-btn.active {
   background: rgba(79, 172, 254, 0.2);
