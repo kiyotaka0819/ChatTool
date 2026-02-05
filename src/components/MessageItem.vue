@@ -196,7 +196,7 @@ const formattedUpdatedTime = computed(() => {
       ]"
     >
       <div class="meta">
-        <strong>{{ msg.user_name }}</strong>
+        <strong>{{ msg.user_name }}&nbsp;&nbsp;</strong>
         <small>{{ formattedTime }}</small>
 
         <span
