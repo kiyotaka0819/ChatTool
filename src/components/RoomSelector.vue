@@ -2,12 +2,27 @@
 import { ref, onMounted } from 'vue'
 import { supabase } from '../lib/supabaseClient'
 
-const emit = defineEmits(['select'])
-const availableRooms = ref([])
-const roomNameInput = ref('')
-const roomPasswordInput = ref('')
+// 親コンポーネント（ChatApp.vue）へ通知するイベント
+const emit = defineEmits(['select', 'openNameModal'])
 
+// 状態管理
+const availableRooms = ref([]) // DBから取得したルーム一覧
+const roomNameInput = ref('') // 入力中のルーム名
+const roomPasswordInput = ref('') // 入力中のパスワード
+
+const props = defineProps({
+  currentUserName: {
+    type: String,
+    default: '名無し'
+  }
+})
+
+// 初期化：マウント時にルーム一覧を取得
 onMounted(() => fetchRooms())
+
+/**
+ * ルーム一覧をDBから取得（新しい順）
+ */
 const fetchRooms = async () => {
   const { data } = await supabase
     .from('rooms')
@@ -16,6 +31,9 @@ const fetchRooms = async () => {
   if (data) availableRooms.value = data
 }
 
+/**
+ * 新規ルームの作成
+ */
 const createRoom = async () => {
   if (!roomNameInput.value || !roomPasswordInput.value)
     return alert('入力してください')
@@ -32,40 +50,58 @@ const createRoom = async () => {
     .single()
 
   if (error) {
+    // ユニーク制約違反（名前の重複）のハンドリング
     if (error.code === '23505') {
-      return alert('そのルーム名は既にあります。別の名前にしてください。')
+      return alert(
+        'そのルーム名は既にあります。別の名前にしてください。'
+      )
     }
     console.error(error)
     return alert('作成失敗しました：' + error.message)
   }
 
+  // 作成成功したらそのまま入室
   emit('select', data)
 }
 
+/**
+ * 既存ルームへの入室（名前とパスワードの照合）
+ */
 const joinRoom = async () => {
   const { data, error } = await supabase
     .from('rooms')
     .select('*')
     .eq('name', roomNameInput.value)
     .eq('password', roomPasswordInput.value)
-    .maybeSingle()
+    .maybeSingle() // 0件または1件を取得
 
   if (error || !data)
     return alert('パスワードか部屋名が違います')
-    
+
   emit('select', data)
 }
+
+/**
+ * リストからルームを選択した際、入力欄に名前を補完する
+ */
 const selectFromList = (room) => {
   roomNameInput.value = room.name
 }
 
+/**
+ * ルームの削除
+ * @param {Object} room - 削除対象のルーム
+ * @param {Event} event - クリックイベント（バブリング防止用）
+ */
 const deleteRoom = async (room, event) => {
+  // 親要素のクリックイベント（selectFromList）が発火しないように止める
   event.stopPropagation()
 
+  // 簡易的な本人確認（パスワード一致）
   const inputPass = prompt(
     `ルーム「${room.name}」を削除するにはパスワードを入力してください`
   )
-  if (inputPass === null) return
+  if (inputPass === null) return // キャンセル時
 
   if (inputPass !== room.password) {
     alert('パスワードが違います。削除に失敗しました。')
@@ -88,9 +124,11 @@ const deleteRoom = async (room, event) => {
     alert('削除に失敗しました： ' + error.message)
   } else {
     alert('ルームを削除しました。')
+    // ローカルの状態を更新して一覧から消す
     availableRooms.value = availableRooms.value.filter(
       (r) => r.id !== room.id
     )
+    // 削除したルームが入力中だった場合はクリア
     if (roomNameInput.value === room.name) {
       roomNameInput.value = ''
       roomPasswordInput.value = ''
@@ -102,6 +140,23 @@ const deleteRoom = async (room, event) => {
 <template>
   <div class="modal-overlay">
     <div class="room-modal">
+      <div class="profile-shortcut">
+        <div class="profile-info">
+          <span class="profile-label">USER</span>
+          <span class="profile-name">{{
+            currentUserName
+          }}</span>
+        </div>
+        <button
+          @click="$emit('openNameModal')"
+          class="small-edit-btn"
+        >
+          変更
+        </button>
+      </div>
+
+      <div class="modal-divider"></div>
+
       <h2>ルーム選択</h2>
 
       <div class="room-list">
@@ -155,6 +210,7 @@ const deleteRoom = async (room, event) => {
           type="password"
           placeholder="パスワード..."
         />
+
         <div class="room-actions">
           <button @click="joinRoom" class="join-btn">
             入室
@@ -169,8 +225,8 @@ const deleteRoom = async (room, event) => {
 </template>
 
 <style scoped>
-input, 
-textarea, 
+input,
+textarea,
 select {
   font-size: 16px !important;
 }
@@ -289,5 +345,61 @@ h2 {
   padding: 20px;
   color: #555;
   font-size: 0.8rem;
+}
+
+.profile-shortcut {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #333;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.profile-label {
+  font-size: 0.6rem;
+  color: #888;
+  letter-spacing: 1px;
+}
+
+.profile-name {
+  font-weight: bold;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.small-edit-btn {
+  background: #444;
+  color: #eee;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.small-edit-btn:hover {
+  background: #555;
+  color: #ff7eb3;
+}
+
+.modal-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #444,
+    transparent
+  );
+  margin-bottom: 20px;
 }
 </style>

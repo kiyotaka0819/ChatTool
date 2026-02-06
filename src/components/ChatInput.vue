@@ -76,28 +76,48 @@ const selectUser = (name) => {
 
 // キーボード操作（上下キー選択・決定）
 const handleKeydown = (e) => {
-  if (!showSuggest.value) return
+  // 1. 日本語入力の確定（変換中）なら、送信もサジェスト操作もさせない
+  if (e.isComposing) return
 
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    // 下に移動
-    selectedIndex.value =
-      (selectedIndex.value + 1) % filteredUsers.value.length
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    // 上に移動
-    selectedIndex.value =
-      (selectedIndex.value -
-        1 +
-        filteredUsers.value.length) %
-      filteredUsers.value.length
-  } else if (e.key === 'Enter' || e.key === 'Tab') {
-    e.preventDefault()
-    // 選択中のユーザーで確定
-    selectUser(filteredUsers.value[selectedIndex.value])
-  } else if (e.key === 'Escape') {
-    // 閉じる
-    showSuggest.value = false
+  // 2. メンションサジェスト表示中の処理
+  if (showSuggest.value) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      selectedIndex.value =
+        (selectedIndex.value + 1) %
+        filteredUsers.value.length
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      selectedIndex.value =
+        (selectedIndex.value -
+          1 +
+          filteredUsers.value.length) %
+        filteredUsers.value.length
+      return
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault() // メンション確定
+      selectUser(filteredUsers.value[selectedIndex.value])
+      return
+    }
+    if (e.key === 'Escape') {
+      showSuggest.value = false
+      return
+    }
+  }
+
+  // 3. 通常のEnter操作（送信 or 改行）
+  if (e.key === 'Enter') {
+    // Shift+Enter もしくは スマホ（画面幅が狭い）なら「改行」
+    if (e.shiftKey || window.innerWidth <= 768) {
+      // 標準の改行挙動に任せる
+    } else {
+      // PCでの単なるEnterは送信
+      e.preventDefault()
+      handleSend()
+    }
   }
 }
 
@@ -229,23 +249,17 @@ const sendWhiteboardImage = async (blob) => {
     </div>
 
     <div class="input-area">
-      <input
-        type="file"
-        ref="fileInput"
-        accept="image/*"
-        style="display: none"
-        @change="handleFileChange"
-      />
-
-      <button @click="fileInput.click()" class="file-btn">
-        📷
-      </button>
-      <button
-        @click="isShowWhiteboard = true"
-        class="wb-open-btn"
-      >
-        🎨
-      </button>
+      <div class="action-buttons">
+        <button @click="fileInput.click()" class="file-btn">
+          📷
+        </button>
+        <button
+          @click="isShowWhiteboard = true"
+          class="wb-open-btn"
+        >
+          🎨
+        </button>
+      </div>
       <div v-if="showSuggest" class="mention-dropdown">
         <div
           v-for="(user, index) in filteredUsers"
@@ -263,10 +277,23 @@ const sendWhiteboardImage = async (blob) => {
       <textarea
         v-model="newMessage"
         @keydown="handleKeydown"
-        @keydown.enter.exact.prevent="handleSend"
+        @keydown.enter="
+          (e) => {
+            // PC（キーボード接続）かつ Shiftを押してない時だけ送信
+            if (
+              e.key === 'Enter' &&
+              !e.shiftKey &&
+              !e.isComposing &&
+              window.innerWidth > 768
+            ) {
+              e.preventDefault()
+              handleSend()
+            }
+          }
+        "
         maxlength="1000"
         placeholder="メッセージを入力...
-Shift + Enterで改行"
+Shift+Enterで改行"
         @paste="handlePaste"
       ></textarea>
 
@@ -326,11 +353,18 @@ textarea {
 }
 
 .input-area {
-  position: relative; /* サジェスト配置の基準 */
-  padding: 20px;
+  position: relative;
+  padding: 10px 15px; /* 少しスリムに */
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ボタン群を縦に並べるコンテナ（HTML側も少し変える） */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* サジェストプルダウンのスタイル */
@@ -372,10 +406,11 @@ textarea {
   color: white;
   padding: 12px;
   border-radius: 15px;
-  height: 60px;
+  height: 76px;
   resize: none;
   outline: none;
   transition: 0.3s;
+  line-height: 1.4;
 }
 textarea:focus {
   border-color: #ff7eb3;
@@ -386,10 +421,11 @@ button.send-btn {
   background: linear-gradient(135deg, #ff7eb3, #ff758c);
   color: white;
   width: 80px;
-  height: 45px;
-  border-radius: 20px;
+  height: 96px;
+  border-radius: 15px;
   font-weight: bold;
   cursor: pointer;
+  transition: 0.3s;
 }
 button.send-btn:disabled {
   opacity: 0.5;
@@ -398,12 +434,19 @@ button.send-btn:disabled {
 
 .file-btn,
 .wb-open-btn {
-  background: #444;
-  width: 50px;
-  height: 45px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #444 !important;
+  /* サイズを明示的に強制 */
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+
+  border-radius: 10px !important;
+  font-size: 1.1rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 </style>
