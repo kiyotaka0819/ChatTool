@@ -314,6 +314,7 @@ const formattedUpdatedTime = computed(() => {
   display: flex;
   width: 100%;
   margin-bottom: 24px;
+  z-index: 1;
   position: relative;
 }
 .msg-row.is-mine {
@@ -327,7 +328,7 @@ const formattedUpdatedTime = computed(() => {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   position: relative;
   transition: all 0.2s;
-  z-index: 10;
+  z-index: 1;
   color: #fff;
 }
 .is-mine .bubble {
@@ -455,7 +456,7 @@ const formattedUpdatedTime = computed(() => {
   padding: 0 18px;
   transition: 0.25s;
   pointer-events: none;
-  z-index: 11;
+  z-index: 3;
 }
 .bubble:hover .actions-overlay,
 .bubble.is-editing-active .actions-overlay {
@@ -530,7 +531,7 @@ const formattedUpdatedTime = computed(() => {
   border-radius: 6px;
   font-size: 0.65rem;
   white-space: nowrap;
-  z-index: 50;
+  z-index: 2;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
   border: 1px solid #444;
 }
@@ -583,5 +584,9 @@ const formattedUpdatedTime = computed(() => {
     opacity: 1;
     pointer-events: auto;
   }
+}
+.msg-row:focus-within,
+.msg-row:hover {
+  z-index: 10;
 }
 </style>
