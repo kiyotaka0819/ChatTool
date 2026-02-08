@@ -1,23 +1,18 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabaseClient'
 
-/**
- * チャットの基幹ロジック（メッセージ取得、リアルタイム同期、入力中状態）を管理するComposable
- */
 export function useChat(currentUserName) {
-  // --- 状態管理 ---
-  const messages = ref([]) // 取得済みメッセージ
-  const allReactions = ref([]) // 表示中メッセージに紐づくリアクション
-  const typingUsers = ref([]) // 自分以外で入力中のユーザー
-  const allRoomUsers = ref([]) // メンション補完用の全発言者リスト
-  const isAllLoaded = ref(false) // 過去ログ完遂フラグ
-  const isFetchingOlder = ref(false) // 過去ログ取得ロック
+  const messages = ref([])
+  const allReactions = ref([])
+  const typingUsers = ref([])
+  const allRoomUsers = ref([])
+  const isAllLoaded = ref(false)
+  const isFetchingOlder = ref(false)
 
-  // 通信チャネル管理
   let roomChannel = null
   let reactionsChannel = null
 
-  /** ルームの発言者を重複なしで一括取得 */
+  /** ルームの発言者リスト取得 */
   const fetchAllRoomUsers = async (roomId) => {
     if (!roomId) return
     const { data, error } = await supabase
@@ -32,7 +27,7 @@ export function useChat(currentUserName) {
     }
   }
 
-  /** メッセージ履歴の取得（初回 & 追加読み込み） */
+  /** 履歴取得 */
   const fetchMessages = async (roomId, isMore = false) => {
     if (
       !roomId ||
@@ -65,7 +60,7 @@ export function useChat(currentUserName) {
     isFetchingOlder.value = false
   }
 
-  /** 表示中メッセージに対するリアクションを同期取得 */
+  /** リアクション一括取得 */
   const _fetchReactionsForVisibleMessages = async () => {
     const messageIds = messages.value.map((m) => m.id)
     if (messageIds.length === 0) return
@@ -76,22 +71,15 @@ export function useChat(currentUserName) {
     if (data) allReactions.value = data
   }
 
-  /**
-   * Supabase Realtime接続のセットアップ
-   * メッセージCRUD、Presence、リアクションを統合購読
-   */
-  const setupRealtime = (
-    roomId,
-    onNewMessage,
-    onRoomUpdate
-  ) => {
+  /** リアルタイム設定 */
+  const setupRealtime = (roomId, onNewMessage) => {
     if (roomChannel) supabase.removeChannel(roomChannel)
     if (reactionsChannel)
       supabase.removeChannel(reactionsChannel)
 
+    // 1. メッセージ・Presence用
     roomChannel = supabase.channel(`room-${roomId}`)
     roomChannel
-      // Presence: 他者のタイピング状態を監視
       .on('presence', { event: 'sync' }, () => {
         const state = roomChannel.presenceState()
         typingUsers.value = Object.values(state)
@@ -103,35 +91,6 @@ export function useChat(currentUserName) {
           )
           .map((u) => u.user_name)
       })
-      // メッセージ挿入時の個別ハンドリング（通知やリスト追加用）
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${roomId}`
-        },
-        (p) => {
-          const exists = messages.value.some(
-            (m) => m.id === p.new.id
-          )
-          if (!exists) {
-            messages.value = [...messages.value, p.new]
-            // 新規ユーザーならメンションリストへ追加
-            if (
-              !allRoomUsers.value.includes(p.new.user_name)
-            ) {
-              allRoomUsers.value = [
-                ...allRoomUsers.value,
-                p.new.user_name
-              ]
-            }
-            if (onNewMessage) onNewMessage(p)
-          }
-        }
-      )
-      // メッセージの全変更（Update, Delete含む）を統合ハンドリング
       .on(
         'postgres_changes',
         {
@@ -142,12 +101,21 @@ export function useChat(currentUserName) {
         },
         (p) => {
           if (p.eventType === 'INSERT') {
-            // 楽観的更新（自分で即座に追加した分）との重複を防ぐ
-            const exists = messages.value.some(
-              (m) => m.id === p.new.id
-            )
-            if (!exists) {
+            if (
+              !messages.value.some((m) => m.id === p.new.id)
+            ) {
               messages.value = [...messages.value, p.new]
+              // ★重要：メンション候補リストを更新
+              if (
+                !allRoomUsers.value.includes(
+                  p.new.user_name
+                )
+              ) {
+                allRoomUsers.value = [
+                  ...allRoomUsers.value,
+                  p.new.user_name
+                ]
+              }
               if (onNewMessage) onNewMessage(p)
             }
           } else if (p.eventType === 'UPDATE') {
@@ -171,9 +139,11 @@ export function useChat(currentUserName) {
         }
       })
 
-    // リアクション専用チャネル
-    reactionsChannel = supabase
-      .channel('public:reactions')
+    // 2. リアクション専用
+    reactionsChannel = supabase.channel(
+      'realtime-reactions'
+    )
+    reactionsChannel
       .on(
         'postgres_changes',
         {
@@ -182,30 +152,30 @@ export function useChat(currentUserName) {
           table: 'reactions'
         },
         (payload) => {
-          const msgId =
-            payload.new?.message_id ||
-            payload.old?.message_id
-          const isVisible = messages.value.some(
-            (m) => m.id === msgId
-          )
-          if (!isVisible) return
-
           if (payload.eventType === 'INSERT') {
-            allReactions.value = [
-              ...allReactions.value,
-              payload.new
-            ]
-          } else if (payload.eventType === 'DELETE') {
-            allReactions.value = allReactions.value.filter(
-              (r) => r.id !== payload.old.id
+            const isVisible = messages.value.some(
+              (m) => m.id === payload.new.message_id
             )
+            if (isVisible) {
+              allReactions.value = [
+                ...allReactions.value,
+                payload.new
+              ]
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = payload.old.id
+            if (deletedId) {
+              allReactions.value =
+                allReactions.value.filter(
+                  (r) => r.id !== deletedId
+                )
+            }
           }
         }
       )
       .subscribe()
   }
 
-  /** タイピング状態を他者へブロードキャスト */
   const handleTyping = async (isTyping) => {
     if (roomChannel)
       await roomChannel.track({
@@ -214,15 +184,12 @@ export function useChat(currentUserName) {
       })
   }
 
-  /** 退室・破棄時の完全クリーンアップ */
   const cleanup = () => {
     if (roomChannel) supabase.removeChannel(roomChannel)
     if (reactionsChannel)
       supabase.removeChannel(reactionsChannel)
     messages.value = []
     allReactions.value = []
-    isAllLoaded.value = false
-    typingUsers.value = []
   }
 
   return {

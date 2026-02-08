@@ -584,4 +584,18 @@ const formattedUpdatedTime = computed(() => {
     pointer-events: auto;
   }
 }
+
+.text :deep(.mention-tag) {
+  color: #ffeb3b !important;
+  font-weight: bold;
+  background: rgba(255, 235, 59, 0.2);
+  padding: 0 4px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.text :deep(.chat-link) {
+  color: #4facfe;
+  text-decoration: underline;
+}
 </style>

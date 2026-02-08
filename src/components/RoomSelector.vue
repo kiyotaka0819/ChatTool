@@ -24,10 +24,17 @@ onMounted(() => fetchRooms())
  * ルーム一覧をDBから取得（新しい順）
  */
 const fetchRooms = async () => {
-  const { data } = await supabase
+  const { data, error } = await supabase // errorも取るようにする
     .from('rooms')
-    .select('id, name, password')
+    .select('*') // 一旦全部取る設定にする
     .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error("部屋取得エラーや！:", error.message) // エラーをコンソールに出す
+    return
+  }
+  
+  console.log("取得データ:", data) // 取得できた中身を見る
   if (data) availableRooms.value = data
 }
 

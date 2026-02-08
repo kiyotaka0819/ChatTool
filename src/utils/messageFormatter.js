@@ -3,7 +3,8 @@
  */
 
 /** SupabaseストレージURLを検知（画像表示用） */
-const STORAGE_URL_REGEX = /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
+const STORAGE_URL_REGEX =
+  /(https?:\/\/[^\s]+chat-attachments[^\s]+)/g
 
 /** メンション（@ユーザー名）を検知 */
 const MENTION_REGEX = /(@[^@\s\n]+)/g
@@ -26,10 +27,13 @@ export const extractImages = (content) => {
  * 1. 画像URLの除去（別途表示するため）
  * 2. 一般リンクのハイライト
  * 3. 存在するユーザーへのメンションをタグ化
- * * @param {string} content - 原文
+ * @param {string} content - 原文
  * @param {Array<string>} allUsers - ルーム内の有効なユーザー名リスト
  */
-export const renderMessageHtml = (content, allUsers = []) => {
+export const renderMessageHtml = (
+  content,
+  allUsers = []
+) => {
   if (!content) return ''
 
   // 画像URLは画像エリアで表示するため、テキストからは除去
@@ -41,6 +45,7 @@ export const renderMessageHtml = (content, allUsers = []) => {
   })
 
   // メンション処理：allUsersに存在する名前のみハイライト
+  // クラス名を「mention-tag」に統一
   return text.replace(MENTION_REGEX, (match) => {
     const userName = match.slice(1)
     if (allUsers.includes(userName)) {
