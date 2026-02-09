@@ -536,9 +536,10 @@ const formattedUpdatedTime = computed(() => {
   border-radius: 6px;
   font-size: 0.65rem;
   white-space: nowrap;
-  z-index: 2;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
   border: 1px solid #444;
+  isolation: isolate;
+  z-index: 10;
 }
 
 /* アニメーション */
