@@ -338,8 +338,6 @@ const formattedUpdatedTime = computed(() => {
 .msg-row:not(.is-mine) .bubble {
   border-bottom-left-radius: 4px;
 }
-
-/* 背景拡張（にゅるっと動くやつ） */
 .bubble::after {
   content: '';
   position: absolute;
@@ -514,11 +512,18 @@ const formattedUpdatedTime = computed(() => {
   padding: 2px 8px;
   font-size: 0.8rem;
 }
+.reaction-badge:hover {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #4facfe;
+  border-color: #4facfe;
+}
 .reaction-badge.is-active {
   border-color: #ffeb3b;
-  background: rgba(255, 235, 59, 0.1);
 }
 
+.reaction-badge.is-active:hover {
+  border-color: #ffeb3b;
+}
 /* 名前表示の吹き出しスタイル */
 .reaction-user-names-bubble {
   position: absolute;
@@ -571,10 +576,17 @@ const formattedUpdatedTime = computed(() => {
   padding: 4px;
   border-radius: 8px;
 }
+.emoji-option:hover {
+  background-color: #4facfe;
+  outline: 1px solid #444;
+}
 .emoji-option.is-selected {
   outline: 1px solid #ffeb3b;
 }
-
+.emoji-option.is-selected:hover {
+  background-color: #4facfe;
+  outline: 2px solid #ffeb3b;
+}
 @media (hover: none) {
   .bubble::after {
     bottom: -32px;

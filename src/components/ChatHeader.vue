@@ -22,25 +22,50 @@ const emit = defineEmits([
         <span class="user-name">{{ currentUserName }}</span>
         <span class="user-trip">{{ currentUserTrip }}</span>
       </div>
-      <button class="edit-btn" @click="$emit('openNameModal')">✏️</button>
+      <button
+        class="edit-btn"
+        @click="$emit('openNameModal')"
+      >
+        ✏️
+      </button>
     </div>
 
     <div class="header-controls">
       <div class="room-meta">
         <span class="room-label">Room:</span>
-        <strong class="room-name" @click="$emit('changeRoomName')">{{ currentRoom?.name }}</strong>
+        <strong
+          class="room-name"
+          @click="$emit('changeRoomName')"
+          >{{ currentRoom?.name }}</strong
+        >
       </div>
-      
+
       <div class="button-group">
-        <button 
-          @click="$emit('toggleNotification')" 
-          :class="['icon-btn', { active: isNotificationEnabled }]"
-          :title="isNotificationEnabled ? '通知ON' : '通知OFF'"
+        <button
+          @click="$emit('toggleNotification')"
+          :class="[
+            'icon-btn',
+            { active: isNotificationEnabled }
+          ]"
+          :title="
+            isNotificationEnabled ? '通知ON' : '通知OFF'
+          "
         >
           {{ isNotificationEnabled ? '🔔' : '🔕' }}
         </button>
-        <button @click="$emit('forceReload')" class="icon-btn" title="再読み込み">🔄</button>
-        <button @click="$emit('leaveRoom')" class="leave-btn">退室</button>
+        <button
+          @click="$emit('forceReload')"
+          class="icon-btn"
+          title="再読み込み"
+        >
+          🔄
+        </button>
+        <button
+          @click="$emit('leaveRoom')"
+          class="leave-btn"
+        >
+          退室
+        </button>
       </div>
     </div>
   </header>
@@ -69,8 +94,15 @@ const emit = defineEmits([
   flex-direction: column;
 }
 
-.user-name { font-weight: bold; font-size: 0.9rem; }
-.user-trip { color: #4facfe; font-size: 0.7rem; font-family: monospace; }
+.user-name {
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+.user-trip {
+  color: #4facfe;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
 
 .header-controls {
   display: flex;
@@ -79,15 +111,23 @@ const emit = defineEmits([
   gap: 4px;
 }
 
-.room-meta { font-size: 0.75rem; }
-.room-name { cursor: pointer; color: #fff; text-decoration: underline; }
+.room-meta {
+  font-size: 0.75rem;
+}
+.room-name {
+  cursor: pointer;
+  color: #fff;
+  text-decoration: underline;
+}
 
 .button-group {
   display: flex;
   gap: 6px;
 }
 
-.icon-btn, .leave-btn, .edit-btn {
+.icon-btn,
+.leave-btn,
+.edit-btn {
   padding: 4px 8px;
   border-radius: 6px;
   font-size: 0.7rem;
@@ -96,8 +136,25 @@ const emit = defineEmits([
   color: #ccc;
 }
 
-.icon-btn.active { color: #4facfe; border-color: #4facfe; }
-.leave-btn:hover { color: #fe784f; border-color: #fe784f; }
+.icon-btn:hover,
+.edit-btn:hover {
+  color: #4facfe;
+  border-color: #4facfe;
+}
+
+.icon-btn.active {
+  color: #4facfe;
+  border-color: #4facfe;
+}
+
+.icon-btn.active:hover {
+  color: #4facfe;
+  border: 2px solid #4facfe;
+}
+.leave-btn:hover {
+  color: #fe784f;
+  border-color: #fe784f;
+}
 @media (min-width: 768px) {
   .header-controls {
     flex-direction: row;
