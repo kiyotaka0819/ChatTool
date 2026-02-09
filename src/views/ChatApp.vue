@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useChat } from '../composables/useChat'
 
 // コンポーネントのインポート
+import ChatHeader from '../components/ChatHeader.vue'
 import MessageItem from '../components/MessageItem.vue'
 import ChatInput from '../components/ChatInput.vue'
 import NameModal from '../components/NameModal.vue'
@@ -74,7 +75,6 @@ const sendMessage = async (content) => {
 
   messages.value = [...messages.value, tempMsg]
 
-  // 自分が送った時は、ディレイを入れてからぬるっと
   await nextTick()
   setTimeout(() => scrollToBottom(false, true), 30)
 
@@ -150,22 +150,17 @@ const scrollToBottom = (instant = false, force = false) => {
   const chatWindow = document.querySelector('.chat-window')
   if (!chatWindow) return
 
-  // 最新のターゲット位置を計算
-  const targetY =
-    chatWindow.scrollHeight - chatWindow.clientHeight
+  const targetY = chatWindow.scrollHeight - chatWindow.clientHeight
   const startY = chatWindow.scrollTop
 
-  // 距離が短すぎるなら計算しない
   if (!force && targetY - startY < 10) return
 
-  // 「即座に」の場合は余計なことせずワープ
   if (instant) {
     chatWindow.scrollTop = chatWindow.scrollHeight
     return
   }
 
-  // --- アニメーション ---
-  const duration = 600 // 600msかけて滑らせる（ここを増やすとより「ぬるっ」とする）
+  const duration = 600 
   let startTime = null
 
   const step = (currentTime) => {
@@ -173,17 +168,13 @@ const scrollToBottom = (instant = false, force = false) => {
     const timeElapsed = currentTime - startTime
     const progress = Math.min(timeElapsed / duration, 1)
 
-    // 強めのイージング（Quad）
     const ease =
       progress < 0.5
         ? 2 * progress * progress
         : 1 - Math.pow(-2 * progress + 2, 2) / 2
 
-    // アニメーション中もscrollHeightが変わる可能性を考慮して毎回取得
-    const currentMax =
-      chatWindow.scrollHeight - chatWindow.clientHeight
-    chatWindow.scrollTop =
-      startY + (currentMax - startY) * ease
+    const currentMax = chatWindow.scrollHeight - chatWindow.clientHeight
+    chatWindow.scrollTop = startY + (currentMax - startY) * ease
 
     if (timeElapsed < duration) {
       requestAnimationFrame(step)
@@ -191,9 +182,9 @@ const scrollToBottom = (instant = false, force = false) => {
       chatWindow.scrollTop = chatWindow.scrollHeight
     }
   }
-
   requestAnimationFrame(step)
 }
+
 /**
  * ルーム選択時のハンドラ
  */
@@ -201,7 +192,6 @@ const handleRoomSelect = async (room) => {
   currentRoom.value = room
   isRoomSelected.value = true
 
-  // 1. データを取ってくる
   await fetchAllRoomUsers(room.id)
   await fetchMessages(room.id)
 
@@ -209,30 +199,24 @@ const handleRoomSelect = async (room) => {
     if (p.new.user_name !== currentUserName.value)
       sendBrowserNotification(p)
 
-    // 履歴を読み込んでる最中（isFetchingOlderがtrue）は勝手にスクロールさせない
     if (!isFetchingOlder.value) {
       nextTick(() => scrollToBottom(false, false))
     }
   })
 
-  // 2. 描画を待つ
   await nextTick()
-
   const chatWindow = document.querySelector('.chat-window')
   if (chatWindow) {
     const startY = chatWindow.scrollTop
-    const endY =
-      chatWindow.scrollHeight - chatWindow.clientHeight
-
-    // 最初から底にいるなら動かずに、距離があるなら滑らせる
+    const endY = chatWindow.scrollHeight - chatWindow.clientHeight
     if (endY > startY) {
-      // 読み込み直後、時間を置いてからスタート
       setTimeout(() => {
-        scrollToBottom(false, true, 1200)
+        scrollToBottom(false, true)
       }, 150)
     }
   }
 }
+
 /**
  * ブラウザ通知
  */
@@ -263,16 +247,12 @@ const sendBrowserNotification = async (p) => {
 
 const toggleNotification = async () => {
   if (!isNotificationEnabled.value) {
-    const permission =
-      await Notification.requestPermission()
+    const permission = await Notification.requestPermission()
     if (permission !== 'granted')
       return alert('通知を許可してください')
   }
   isNotificationEnabled.value = !isNotificationEnabled.value
-  localStorage.setItem(
-    'chat-notify',
-    isNotificationEnabled.value
-  )
+  localStorage.setItem('chat-notify', isNotificationEnabled.value)
 }
 
 const leaveRoom = () => {
@@ -289,24 +269,16 @@ const prepareReply = (userName) => {
 onBeforeUnmount(() => cleanup())
 
 const loadMoreMessages = async () => {
-  if (
-    !currentRoom.value ||
-    isFetchingOlder.value ||
-    isAllLoaded.value
-  )
-    return
+  if (!currentRoom.value || isFetchingOlder.value || isAllLoaded.value) return
 
   const chatWindow = document.querySelector('.chat-window')
-  const previousScrollHeight = chatWindow
-    ? chatWindow.scrollHeight
-    : 0
+  const previousScrollHeight = chatWindow ? chatWindow.scrollHeight : 0
 
   await fetchMessages(currentRoom.value.id, true)
 
   await nextTick()
   if (chatWindow) {
-    chatWindow.scrollTop =
-      chatWindow.scrollHeight - previousScrollHeight
+    chatWindow.scrollTop = chatWindow.scrollHeight - previousScrollHeight
   }
 }
 
@@ -325,8 +297,7 @@ const updateRoomName = async () => {
 
 const forceReload = async () => {
   if ('serviceWorker' in navigator) {
-    const registrations =
-      await navigator.serviceWorker.getRegistrations()
+    const registrations = await navigator.serviceWorker.getRegistrations()
     for (const registration of registrations) {
       await registration.unregister()
     }
@@ -336,22 +307,12 @@ const forceReload = async () => {
   window.location.href = url.toString()
 }
 
-const showToast = (msg) => {
-  systemMessage.value = msg
-  setTimeout(() => {
-    systemMessage.value = ''
-  }, 3000)
-}
-
+// ページ読み込み時のURLクリーンアップ
 onMounted(() => {
   const url = new URL(window.location.href)
   if (url.searchParams.has('t')) {
     url.searchParams.delete('t')
-    window.history.replaceState(
-      {},
-      '',
-      url.pathname + url.search
-    )
+    window.history.replaceState({}, '', url.pathname + url.search)
   }
 })
 
@@ -364,26 +325,12 @@ const handleNameConfirm = (userData) => {
   isShowNameModal.value = false
 }
 
-/**
- * 画像読み込み時のスクロール制御
- */
 const handleImageLoadScroll = () => {
-  // 1. 過去ログ取得中なら絶対にスクロールさせない
   if (isFetchingOlder.value) return
-
   const chatWindow = document.querySelector('.chat-window')
   if (!chatWindow) return
-
-  // 2. 現在の位置が「底の近く」にいる時だけ追従させる
-  // 底から100px以上離れてる（＝ユーザーが上で過去ログを読んでる）なら無視
-  // 過去ログ探索時にも最下部に行ってしまうことを防ぐ
-  const distanceFromBottom =
-    chatWindow.scrollHeight -
-    chatWindow.scrollTop -
-    chatWindow.clientHeight
-
+  const distanceFromBottom = chatWindow.scrollHeight - chatWindow.scrollTop - chatWindow.clientHeight
   if (distanceFromBottom < 100) {
-    // 自分のメッセージ送信時などは force で飛ばしたいから、判定あり
     scrollToBottom(false, false)
   }
 }
@@ -412,68 +359,21 @@ const handleImageLoadScroll = () => {
     />
 
     <div v-else class="chat-app">
-      <header class="chat-header">
-        <div class="user-display">
-          <span class="user-name">{{
-            currentUserName
-          }}</span>
-          <span class="user-trip">{{
-            currentUserTrip
-          }}</span>
-          <button
-            class="edit-btn"
-            @click="isShowNameModal = true"
-          >
-            ✏️
-          </button>
-        </div>
-
-        <div class="header-controls">
-          <span class="room-info"
-            >Room:
-            <strong>{{ currentRoom?.name }}</strong></span
-          >
-          <button
-            @click="isChangingRoomName = true"
-            class="update-room-name"
-          >
-            ルーム名変更
-          </button>
-          <button
-            @click="toggleNotification"
-            :class="[
-              'notify-btn',
-              { active: isNotificationEnabled }
-            ]"
-          >
-            {{
-              isNotificationEnabled
-                ? '🔔 通知ON'
-                : '🔕 通知OFF'
-            }}
-          </button>
-          <button @click="forceReload" class="reload-btn">
-            再読み込み
-          </button>
-          <button @click="leaveRoom" class="leave-btn">
-            退室
-          </button>
-        </div>
-
-        <RoomNameModal
-          v-if="isChangingRoomName"
-          v-model="currentRoom.name"
-          @close="isChangingRoomName = false"
-          @confirm="updateRoomName"
-        />
-      </header>
+      <ChatHeader 
+        :currentUserName="currentUserName"
+        :currentUserTrip="currentUserTrip"
+        :currentRoom="currentRoom"
+        :isNotificationEnabled="isNotificationEnabled"
+        @openNameModal="isShowNameModal = true"
+        @changeRoomName="isChangingRoomName = true"
+        @toggleNotification="toggleNotification"
+        @forceReload="forceReload"
+        @leaveRoom="leaveRoom"
+      />
 
       <div
         class="chat-window"
-        @scroll="
-          (e) =>
-            e.target.scrollTop < 5 && loadMoreMessages()
-        "
+        @scroll="(e) => e.target.scrollTop < 5 && loadMoreMessages()"
       >
         <div v-if="isFetchingOlder" class="loading-logs">
           過去ログを読み込み中...
@@ -489,13 +389,10 @@ const handleImageLoadScroll = () => {
           @delete="deleteMessage"
           @update="updateMessage"
           @image-loaded="handleImageLoadScroll"
-          @reply="prepareReply"
+          @reply="prepareReply($event)"
         />
 
-        <div
-          v-if="typingUsers.length > 0"
-          class="typing-indicator"
-        >
+        <div v-if="typingUsers.length > 0" class="typing-indicator">
           {{ typingUsers.join(', ') }} が入力中...
         </div>
       </div>
@@ -507,6 +404,13 @@ const handleImageLoadScroll = () => {
         :allUsers="allRoomUsers"
         @replyProcessed="replyTarget = ''"
       />
+
+      <RoomNameModal
+        v-if="isChangingRoomName"
+        v-model="currentRoom.name"
+        @close="isChangingRoomName = false"
+        @confirm="updateRoomName"
+      />
     </div>
   </div>
 </template>
@@ -515,11 +419,8 @@ const handleImageLoadScroll = () => {
 .dark-theme {
   --bg-dark: #121212;
   --bg-card: #1e1e1e;
-  --accent: #ff7eb3;
-  --text-main: #e0e0e0;
-  --text-sub: #888888;
   background-color: var(--bg-dark);
-  color: var(--text-main);
+  color: #e0e0e0;
   height: 100vh;
   width: 100vw;
   display: flex;
@@ -534,151 +435,32 @@ const handleImageLoadScroll = () => {
   height: 90dvh;
   background: var(--bg-card);
   border-radius: 24px;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: env(safe-area-inset-bottom);
+  display: flex; flex-direction: column;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   border: 1px solid #333;
   overflow: hidden;
-  position: relative;
-}
-
-header {
-  flex-shrink: 0;
-  padding: 12px 20px;
-  background: #1e1e1e;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #333;
-  z-index: 10;
-}
-
-.user-display,
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.user-name {
-  font-weight: bold;
-}
-
-.user-trip {
-  color: #4facfe;
-  font-size: 0.8rem;
-  font-weight: bold;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.room-info {
-  font-size: 0.85rem;
-  margin-right: 5px;
-}
-
-.leave-btn,
-.notify-btn,
-.update-room-name,
-.reload-btn,
-.edit-btn {
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  border: 1px solid #444;
-  background: rgba(255, 255, 255, 0.05);
-  color: #ccc;
-  transition: all 0.2s ease;
-}
-
-
-.notify-btn:hover,
-.update-room-name:hover,
-.reload-btn:hover,
-.edit-btn:hover {
-  border-color: #4facfe;
-  background: rgba(79, 172, 254, 0.15);
-  color: #4facfe;
-  box-shadow: 0 0 8px rgba(79, 172, 254, 0.3);
-}
-.leave-btn:hover {
-  border-color: #e00909;
-  background: rgba(79, 172, 254, 0.15);
-  color: #fe784f;
-  box-shadow: 0 0 8px rgba(79, 172, 254, 0.3);
-}
-.notify-btn.active {
-  background: rgba(79, 172, 254, 0.2);
-  color: #4facfe;
-  border-color: #4facfe;
-}
-
-.edit-btn {
-  padding: 2px 6px;
-  border-radius: 6px;
 }
 
 .chat-window {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  background: radial-gradient(
-    circle at center,
-    #222 0%,
-    #1a1a1a 100%
-  );
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  background: radial-gradient(circle at center, #222 0%, #1a1a1a 100%);
+  display: flex; flex-direction: column; gap: 12px;
 }
 
-.chat-window::-webkit-scrollbar {
-  width: 6px;
-}
+.chat-window::-webkit-scrollbar { width: 6px; }
+.chat-window::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
 
-.chat-window::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 10px;
-}
-
-.typing-indicator {
-  font-size: 0.75rem;
-  color: var(--text-sub);
-  font-style: italic;
-}
-
-.loading-logs {
-  text-align: center;
-  padding: 10px;
-  color: var(--text-sub);
-  font-size: 0.8rem;
-}
+.typing-indicator { font-size: 0.75rem; color: #888; font-style: italic; }
+.loading-logs { text-align: center; padding: 10px; color: #888; font-size: 0.8rem; }
 
 .toast-notification {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 122, 255, 0.9);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 20px;
-  z-index: 9999;
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 122, 255, 0.9); color: white;
+  padding: 10px 20px; border-radius: 20px; z-index: 9999;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+.fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
