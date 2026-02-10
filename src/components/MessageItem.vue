@@ -60,12 +60,23 @@ const toggleImage = () => {
 const formattedHtml = computed(() =>
   renderMessageHtml(props.msg.content, props.allUsers)
 )
-const formattedTime = computed(() =>
-  new Date(props.msg.created_at).toLocaleTimeString(
-    'ja-JP',
-    { hour: '2-digit', minute: '2-digit' }
-  )
-)
+// 再利用できるように外側で定義（パフォーマンス最適化）
+const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
+const formattedTime = computed(() => {
+  if (!props.msg.created_at) return ''
+  const date = new Date(props.msg.created_at)
+  // 不正な日付チェック
+  return isNaN(date.getTime())
+    ? ''
+    : dateFormatter.format(date)
+})
 
 const groupedReactions = computed(() => {
   const relevant = (props.reactions || []).filter(
@@ -126,12 +137,19 @@ const addReaction = async (emoji) => {
 const isEdited = computed(
   () => props.msg.is_edited === true
 )
+const timeFormatter = new Intl.DateTimeFormat('ja-JP', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+})
+
 const formattedUpdatedTime = computed(() => {
   if (!props.msg.updated_at) return ''
-  return new Date(props.msg.updated_at).toLocaleTimeString(
-    'ja-JP',
-    { hour: '2-digit', minute: '2-digit' }
-  )
+  const date = new Date(props.msg.updated_at)
+  return isNaN(date.getTime())
+    ? ''
+    : timeFormatter.format(date)
 })
 </script>
 
@@ -317,11 +335,14 @@ const formattedUpdatedTime = computed(() => {
   z-index: 1;
   position: relative;
 }
+
 .msg-row.is-mine {
   justify-content: flex-end;
 }
+
 .bubble {
-  max-width: 75%;
+  /* 自分以外の吹き出し：画面の半分（50%）に制限 */
+  max-width: 50%;
   padding: 12px 18px;
   border-radius: 18px;
   background: #333;
@@ -330,14 +351,22 @@ const formattedUpdatedTime = computed(() => {
   transition: all 0.2s;
   z-index: 1;
   color: #fff;
+  /* Flexコンテナ内での圧縮を防ぐ */
+  flex-shrink: 0;
 }
+
 .is-mine .bubble {
+  /* 自分の吹き出し：右側に寄るので、少し控えめ（45%）にして中央を空ける */
+  max-width: 45%;
   background: linear-gradient(135deg, #007aff, #0056b3);
   border-bottom-right-radius: 4px;
 }
+
 .msg-row:not(.is-mine) .bubble {
   border-bottom-left-radius: 4px;
 }
+
+/* ホバー時の背景伸び */
 .bubble::after {
   content: '';
   position: absolute;
@@ -351,27 +380,36 @@ const formattedUpdatedTime = computed(() => {
   transition: bottom 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
+
 .bubble:hover::after,
 .bubble.is-editing-active::after {
   bottom: -32px;
 }
+
+/* --- 編集モード時のバブル調整 --- */
 .bubble.is-editing-active {
-  max-width: 95%;
-  width: 100%;
+  /* 編集時は少し広めに（60%）確保するが、画面の半分強に留める */
+  max-width: 60%;
+  width: 100%; /* max-widthの範囲内でいっぱいに広げる */
   background: #007aff;
 }
 
-/* --- メタ情報 --- */
+/* --- メタ情報（名前・時間） --- */
 .meta {
   display: flex;
-  align-items: baseline;
+  /* baselineからcenterに変更して上下中央揃えに */
+  align-items: center;
   gap: 12px;
   margin-bottom: 6px;
+  width: 100%;
 }
+
 .display-name {
   font-size: 0.9rem;
   font-weight: 700;
+  line-height: 1; /* 行間の余白を消してズレを防止 */
 }
+
 .trip-id {
   font-size: 0.7rem;
   font-weight: 800;
@@ -380,15 +418,32 @@ const formattedUpdatedTime = computed(() => {
   padding: 1px 6px;
   border-radius: 4px;
   font-family: monospace;
+  line-height: 1.2;
 }
+
+.time-box {
+  /* 右側に押し出す最強設定 */
+  margin-left: auto;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+}
+
 .time {
   font-size: 0.7rem;
   opacity: 0.5;
+  line-height: 1;
 }
+
 .edited-label {
+  display: block;
   font-size: 0.6rem;
   font-style: italic;
   opacity: 0.5;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 /* --- 本文 --- */
@@ -398,13 +453,15 @@ const formattedUpdatedTime = computed(() => {
   margin: 5px 0;
   line-height: 1.5;
 }
+
 .chat-image {
   display: block;
-  max-width: 600px;
+  max-width: 100%; /* 吹き出しを突き破らないように変更 */
   border-radius: 12px;
   transition: 0.3s;
   background: #2a2a2a;
 }
+
 .chat-image.collapsed {
   max-height: 70px;
   object-fit: cover;
@@ -421,9 +478,14 @@ const formattedUpdatedTime = computed(() => {
   );
 }
 
-/* --- 編集モード --- */
+/* --- 編集モード入力欄 --- */
+.edit-mode-container {
+  width: 100%;
+}
+
 .edit-area {
   width: 100%;
+  box-sizing: border-box; /* paddingで幅が突き抜けるのを防ぐ */
   min-height: 100px;
   background: rgba(255, 255, 255, 0.1);
   color: white;
@@ -433,6 +495,7 @@ const formattedUpdatedTime = computed(() => {
   outline: none;
   resize: vertical;
 }
+
 .keyHint-under {
   display: flex;
   justify-content: flex-end;
@@ -441,7 +504,7 @@ const formattedUpdatedTime = computed(() => {
   margin-top: 6px;
 }
 
-/* --- アクションボタン --- */
+/* --- アクションボタン（編集・削除など） --- */
 .actions-overlay {
   position: absolute;
   left: 0;
@@ -456,12 +519,14 @@ const formattedUpdatedTime = computed(() => {
   pointer-events: none;
   z-index: 3;
 }
+
 .bubble:hover .actions-overlay,
 .bubble.is-editing-active .actions-overlay {
   bottom: -22px;
   opacity: 1;
   pointer-events: auto;
 }
+
 .actions-inner {
   display: flex;
   gap: 12px;
@@ -470,15 +535,18 @@ const formattedUpdatedTime = computed(() => {
   padding-top: 8px;
   justify-content: flex-start;
 }
-.bubble.is-editing-active .actions-inner {
-  justify-content: flex-end;
+
+.bubble.is-mine .actions-inner {
+  justify-content: flex-end; /* 自分のメッセージのアクションは右寄せ */
 }
+
 .action-btn {
   font-size: 0.65rem;
   font-weight: bold;
   cursor: pointer;
   color: #ccc;
 }
+
 .action-btn:hover {
   color: white;
 }
@@ -491,7 +559,8 @@ const formattedUpdatedTime = computed(() => {
   margin-top: 8px;
   position: relative;
 }
-.bubble.is-editing-active .reactions-container {
+
+.is-mine .reactions-container {
   justify-content: flex-end;
 }
 
@@ -512,19 +581,16 @@ const formattedUpdatedTime = computed(() => {
   padding: 2px 8px;
   font-size: 0.8rem;
 }
+
 .reaction-badge:hover {
-  border: 1px solid rgba(255, 255, 255, 0.1);
   background: #4facfe;
   border-color: #4facfe;
 }
+
 .reaction-badge.is-active {
   border-color: #ffeb3b;
 }
 
-.reaction-badge.is-active:hover {
-  border-color: #ffeb3b;
-}
-/* 名前表示の吹き出しスタイル */
 .reaction-user-names-bubble {
   position: absolute;
   top: 110%;
@@ -538,11 +604,10 @@ const formattedUpdatedTime = computed(() => {
   white-space: nowrap;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
   border: 1px solid #444;
-  isolation: isolate;
   z-index: 10;
 }
 
-/* アニメーション */
+/* --- アニメーション --- */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: all 0.2s ease;
@@ -567,27 +632,28 @@ const formattedUpdatedTime = computed(() => {
   border: 1px solid #444;
   z-index: 100;
 }
+
 .is-mine .floating-emoji-picker {
   left: auto;
   right: 0;
 }
+
 .emoji-option {
   font-size: 1.2rem;
   cursor: pointer;
   padding: 4px;
   border-radius: 8px;
 }
+
 .emoji-option:hover {
   background-color: #4facfe;
-  outline: 1px solid #444;
 }
+
 .emoji-option.is-selected {
   outline: 1px solid #ffeb3b;
 }
-.emoji-option.is-selected:hover {
-  background-color: #4facfe;
-  outline: 2px solid #ffeb3b;
-}
+
+/* --- モバイル対応 --- */
 @media (hover: none) {
   .bubble::after {
     bottom: -32px;
@@ -598,11 +664,13 @@ const formattedUpdatedTime = computed(() => {
     pointer-events: auto;
   }
 }
+
 .msg-row:focus-within,
 .msg-row:hover {
   z-index: 10;
 }
 
+/* メンション・リンク用 */
 .text :deep(.mention-tag) {
   color: #ffeb3b !important;
   font-weight: bold;

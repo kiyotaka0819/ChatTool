@@ -92,6 +92,7 @@ const emit = defineEmits([
 .user-info-text {
   display: flex;
   flex-direction: column;
+  align-items: center;
 }
 
 .user-name {

@@ -431,7 +431,7 @@ const handleImageLoadScroll = () => {
 
 .chat-app {
   width: 95%;
-  max-width: 800px;
+  max-width: 1000px;
   height: 90dvh;
   background: var(--bg-card);
   border-radius: 24px;
